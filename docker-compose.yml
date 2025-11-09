@@ -1,0 +1,27 @@
+services:
+  web:
+    build: .
+    container_name: billing_mikrotik_web
+    restart: unless-stopped
+    env_file:
+      - .env 
+    networks:
+      - cloudflared
+
+  cron:
+    build: .
+    container_name: billing_mikrotik_cron
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - cloudflared
+    # Override CMD: jalankan cron di foreground
+    command: ["cron", "-f"]
+    # opsional: mount volume untuk lihat log cron dari host
+    volumes:
+      - ./logs/cron:/var/log/cron
+  
+networks:
+  cloudflared: 
+    external: true
