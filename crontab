@@ -18,12 +18,12 @@ LOGFILE=/var/log/cron/app-cron.log
 # │ │ │ │ │   user   perintah
 
 # 1) Generate invoice reseller tiap tanggal 5 jam 02:00
-0 2 5 * * root cd $APP_HOME && /usr/local/bin/python cron_jobs/generate_reseller_invoices.py >> $LOGFILE 2>&1
+0 2 5 * * root cd $APP_HOME && /usr/local/bin/python -m cron_jobs.generate_reseller_invoices >> $LOGFILE 2>&1
 
 # 2) Notif user belum bayar tiap hari jam 07:00
-0 7 * * * root cd $APP_HOME && /usr/local/bin/python cron_jobs/notify_unpaid_users.py >> $LOGFILE 2>&1
+0 7 * * * root cd $APP_HOME && /usr/local/bin/python -m cron_jobs.notify_unpaid_users >> $LOGFILE 2>&1
 
 # 3) Isolate user belum bayar tiap hari jam 08:00
-0 8 * * * root cd $APP_HOME && /usr/local/bin/python cron_jobs/isolate_unpaid_users.py >> $LOGFILE 2>&1
+0 8 * * * root cd $APP_HOME && /usr/local/bin/python -m cron_jobs.isolate_unpaid_users >> $LOGFILE 2>&1
 
 # Wajib diakhiri newline
