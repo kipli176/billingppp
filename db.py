@@ -4,94 +4,149 @@ db.py
 Helper koneksi Postgres menggunakan psycopg2 connection pool.
 
 Menyediakan fungsi:
-- init_app(app)    : dipanggil sekali di create_app()
+- init_app(app=None)
 - query_one(sql, params)
 - query_all(sql, params)
-- execute(sql, params)
+- execute(sql, params, commit=True)
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import psycopg2
 from psycopg2 import pool
 from psycopg2.extras import RealDictCursor
-from flask import current_app, g
 
-_connection_pool: Optional[pool.SimpleConnectionPool] = None
+from config import Config
+
+# Pool koneksi global
+_DB_POOL: Optional[pool.SimpleConnectionPool] = None
 
 
-def init_app(app):
+def init_app(app=None, minconn: int = 1, maxconn: int = 10) -> None:
     """
-    Inisialisasi connection pool waktu Flask app dibuat.
-    Dipanggil dari app.py -> create_app().
-    """
-    global _connection_pool
+    Inisialisasi connection pool.
 
-    dsn = app.config.get("DATABASE_URL")
+    - Jika dipanggil dari Flask: kirim `app`, dan akan baca app.config["DATABASE_URL"].
+    - Jika dipanggil dari script/cron: cukup `init_app()` tanpa argumen,
+      akan pakai Config.DATABASE_URL (dari .env / environment).
+    """
+    global _DB_POOL
+    if _DB_POOL is not None:
+        # Sudah di-init, tidak perlu diulang
+        return
+
+    dsn: Optional[str] = None
+
+    # Prioritas 1: app.config kalau ada
+    if app is not None and getattr(app, "config", None):
+        dsn = app.config.get("DATABASE_URL")
+
+    # Prioritas 2: Config.DATABASE_URL
     if not dsn:
-        raise RuntimeError("DATABASE_URL belum diset di konfigurasi.")
+        dsn = getattr(Config, "DATABASE_URL", None)
 
-    _connection_pool = psycopg2.pool.SimpleConnectionPool(
-        minconn=1,
-        maxconn=10,
-        dsn=dsn,
-    )
+    if not dsn:
+        raise RuntimeError(
+            "DATABASE_URL belum diset. Pastikan environment / .env berisi DATABASE_URL."
+        )
 
-    @app.teardown_appcontext
-    def _close_db_connection(exception=None):
-        """
-        Setiap akhir request: kembalikan koneksi ke pool.
-        """
-        conn = g.pop("db_conn", None)
-        if conn is not None and _connection_pool is not None:
-            _connection_pool.putconn(conn)
+    _DB_POOL = pool.SimpleConnectionPool(minconn, maxconn, dsn)
 
 
 def _get_conn():
     """
-    Ambil koneksi dari pool, disimpan di flask.g selama 1 request.
+    Ambil 1 koneksi dari pool.
+    Jika pool belum dibuat, otomatis panggil init_app() (lazy init).
     """
-    if _connection_pool is None:
-        raise RuntimeError("Connection pool belum diinisialisasi. Panggil db.init_app(app) dulu.")
+    global _DB_POOL
+    if _DB_POOL is None:
+        # lazy init: baca dari Config / .env
+        init_app()
 
-    if "db_conn" not in g:
-        g.db_conn = _connection_pool.getconn()
-    return g.db_conn
+    if _DB_POOL is None:
+        # Kalau masih None berarti init gagal
+        raise RuntimeError(
+            "Connection pool belum diinisialisasi dan init_app() gagal. "
+            "Periksa konfigurasi DATABASE_URL."
+        )
+
+    return _DB_POOL.getconn()
 
 
-def query_one(sql: str, params: Dict[str, Any] | Tuple | None = None) -> Optional[Dict[str, Any]]:
+def _put_conn(conn) -> None:
     """
-    Eksekusi SELECT dan ambil 1 baris (dict) atau None.
+    Kembalikan koneksi ke pool.
+    """
+    global _DB_POOL
+    if _DB_POOL is not None:
+        _DB_POOL.putconn(conn)
+    else:
+        # fallback keamanan
+        conn.close()
+
+
+def close_all() -> None:
+    """
+    Tutup semua koneksi di pool (opsional, dipakai saat shutdown).
+    """
+    global _DB_POOL
+    if _DB_POOL is not None:
+        _DB_POOL.closeall()
+        _DB_POOL = None
+
+
+ParamsType = Union[Dict[str, Any], Sequence[Any], None]
+
+
+def query_one(sql: str, params: ParamsType = None) -> Optional[Dict[str, Any]]:
+    """
+    Jalankan SELECT dan ambil 1 row (atau None).
+    Mengembalikan dict: field_name -> value.
     """
     conn = _get_conn()
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, params or {})
-        row = cur.fetchone()
-    return row
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, params or {})
+            row = cur.fetchone()
+        return dict(row) if row is not None else None
+    finally:
+        _put_conn(conn)
 
 
-def query_all(sql: str, params: Dict[str, Any] | Tuple | None = None) -> List[Dict[str, Any]]:
+def query_all(sql: str, params: ParamsType = None) -> List[Dict[str, Any]]:
     """
-    Eksekusi SELECT dan ambil semua baris (list of dict).
+    Jalankan SELECT dan ambil semua row.
+    Mengembalikan list of dict.
     """
     conn = _get_conn()
-    with conn.cursor(cursor_factory=RealDictCursor) as cur:
-        cur.execute(sql, params or {})
-        rows = cur.fetchall()
-    return list(rows)
+    try:
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute(sql, params or {})
+            rows = cur.fetchall()
+        # pastikan list of plain dict, bukan RealDictRow
+        return [dict(r) for r in rows]
+    finally:
+        _put_conn(conn)
 
 
-def execute(sql: str, params: Dict[str, Any] | Tuple | None = None, commit: bool = True) -> int:
+def execute(
+    sql: str,
+    params: ParamsType = None,
+    commit: bool = True,
+) -> int:
     """
-    Eksekusi INSERT / UPDATE / DELETE.
+    Jalankan INSERT / UPDATE / DELETE.
     Mengembalikan jumlah row yang terpengaruh.
     """
     conn = _get_conn()
-    with conn.cursor() as cur:
-        cur.execute(sql, params or {})
-        rowcount = cur.rowcount
-    if commit:
-        conn.commit()
-    return rowcount
+    try:
+        with conn.cursor() as cur:
+            cur.execute(sql, params or {})
+            rowcount = cur.rowcount
+        if commit:
+            conn.commit()
+        return rowcount
+    finally:
+        _put_conn(conn)
