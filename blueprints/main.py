@@ -118,7 +118,7 @@ def dashboard():
     except Exception as e:
         db_error = f"Gagal mengambil invoice bulan ini: {e}"
 
-    if current_invoice and current_invoice["status"] != "paid" and today.day > 5:
+    if current_invoice and current_invoice["status"] != "paid" and today.day > 10:
         locked_by_invoice = True
         # Bangun pesan WA ke admin (08562603077 -> 628562603077)
         msg = (
