@@ -79,7 +79,7 @@ def isolate_unpaid_users() -> None:
             try:
                 db.execute("""
                     UPDATE ppp_customers
-                    SET profile_id = %(pid)s,
+                    SET 
                         is_isolated = TRUE,
                         updated_at = NOW()
                     WHERE id = %(cid)s

@@ -1342,69 +1342,98 @@ def isolate_customer(customer_id: int):
 def unisolate_customer(customer_id: int):
     """
     Un-isolate user:
-    - Cari salah satu profile normal (is_isolation = FALSE) untuk reseller ini,
-      gunakan sebagai "profil normal default".
-    - Ganti profile_id + profile di router ke profil normal tersebut.
-    NOTE: Tanpa kolom extra di DB, kita tidak bisa tahu profil sebelumnya dengan pasti.
+    - DB: set is_isolated = FALSE (profile_id TIDAK diubah).
+    - Mikrotik: ganti PPP profile sesuai profile_id di DB (profil normal user).
     """
     reseller, router_ip, redirect_resp = _require_login()
     if redirect_resp is not None:
         return redirect_resp
 
     if not router_ip or router_ip == "-":
-        return redirect(url_for("customers.list_customers", error="Router IP hilang dari session."))
+        return redirect(
+            url_for("customers.list_customers", error="Router IP hilang dari session.")
+        )
 
+    # Ambil customer, termasuk profile_id
     cust = db.query_one(
         """
-        SELECT c.id, c.ppp_username, c.profile_id,
+        SELECT c.id,
+               c.ppp_username,
+               c.profile_id,
                c.is_isolated
         FROM ppp_customers c
-        WHERE c.id = %(cid)s AND c.reseller_id = %(rid)s
+        WHERE c.id = %(cid)s
+          AND c.reseller_id = %(rid)s
         """,
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
+        return redirect(
+            url_for("customers.list_customers", error="Customer tidak ditemukan.")
+        )
 
     if not cust["is_isolated"]:
-        return redirect(url_for("customers.list_customers", error="User ini tidak dalam status isolasi."))
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error="User ini tidak dalam status isolasi.",
+            )
+        )
 
     username = cust["ppp_username"]
+    profile_id = cust["profile_id"]
 
+    if profile_id is None:
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error="profile_id di database kosong, tidak tahu harus kembali ke profile apa.",
+            )
+        )
+
+    # Cari nama profile normal berdasarkan profile_id di DB
     normal_profile = db.query_one(
         """
-        SELECT id, name
+        SELECT id, name, is_isolation
         FROM ppp_profiles
-        WHERE reseller_id = %(rid)s
-          AND is_isolation = FALSE
-        ORDER BY id
-        LIMIT 1
+        WHERE id = %(pid)s
+          AND reseller_id = %(rid)s
         """,
-        {"rid": reseller["id"]},
+        {"pid": profile_id, "rid": reseller["id"]},
     )
     if normal_profile is None:
-        return redirect(url_for("customers.list_customers", error="Belum ada profile normal (is_isolation=FALSE) untuk reseller ini."))
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error="Profil normal (berdasarkan profile_id) tidak ditemukan di ppp_profiles.",
+            )
+        )
 
-    norm_pid = normal_profile["id"]
     norm_name = normal_profile["name"]
 
-    api_user = reseller["router_username"]
-    api_pass = reseller["router_password"]
-
+    # 1) Update DB: flag is_isolated = FALSE
     try:
         db.execute(
             """
             UPDATE ppp_customers
-            SET 
-                is_isolated = FALSE,
-                updated_at = NOW()
+            SET is_isolated = FALSE,
+                updated_at   = NOW()
             WHERE id = %(cid)s
             """,
-            {"pid": norm_pid, "cid": customer_id},
+            {"cid": customer_id},
         )
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"Gagal update DB untuk unisolate: {e}"))
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"Gagal update DB untuk unisolate: {e}",
+            )
+        )
 
+    api_user = reseller["router_username"]
+    api_pass = reseller["router_password"]
+
+    # 2) Update profile di Mikrotik → sesuai profile_id (profil normal)
     try:
         update_ppp_secret(
             router_ip,
@@ -1414,19 +1443,29 @@ def unisolate_customer(customer_id: int):
             updates={"profile": norm_name},
         )
     except MikrotikError as e:
-        return redirect(url_for("customers.list_customers", error=f"DB sudah unisolate, tapi gagal ganti profile di router: {e}"))
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"DB sudah unisolate, tapi gagal ganti profile di router: {e}",
+            )
+        )
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"DB sudah unisolate, tapi error ganti profile di router: {e}"))
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"DB sudah unisolate, tapi error ganti profile di router: {e}",
+            )
+        )
 
-    # kill session aktif supaya reconnect pakai profil normal
+    # 3) Kill session supaya reconnect dengan profil normal
     try:
         terminate_ppp_active_by_name(router_ip, api_user, api_pass, username)
     except Exception as e:
         print(f"[unisolate_customer] gagal terminate session {username}: {e}")
 
-    msg = f"User '{username}' sudah dikembalikan dari isolasi ke profile normal '{norm_name}'."
-
+    msg = f"User '{username}' sudah dikembalikan dari isolasi ke profile '{norm_name}'."
     return redirect(url_for("customers.list_customers", success=msg))
+
 
 
 # ======================================================================
