@@ -1302,7 +1302,7 @@ def isolate_customer(customer_id: int):
         db.execute(
             """
             UPDATE ppp_customers
-            SET profile_id = %(pid)s,
+            SET 
                 is_isolated = TRUE,
                 updated_at = NOW()
             WHERE id = %(cid)s
@@ -1395,7 +1395,7 @@ def unisolate_customer(customer_id: int):
         db.execute(
             """
             UPDATE ppp_customers
-            SET profile_id = %(pid)s,
+            SET 
                 is_isolated = FALSE,
                 updated_at = NOW()
             WHERE id = %(cid)s
