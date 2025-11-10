@@ -12,7 +12,11 @@ from flask import (
     redirect,
     url_for,
     current_app,
+    has_app_context,
 )
+
+from config import Config
+
 
 import db
 from app import render_terminal_page
@@ -33,30 +37,39 @@ def _router_admin_request(
     """
     Helper panggilan REST ke Router Admin (router pusat).
 
-    - Base URL diambil dari config.ROUTER_ADMIN_BASE_URL
-      Contoh: "http://203.190.43.51/rest"
-    - path harus mulai dengan "/ppp/..." misalnya:
-      "/ppp/secret" atau "/ppp/secret/<name>"
-
-    Auth pakai:
-    - ROUTER_ADMIN_USER
-    - ROUTER_ADMIN_PASSWORD
-
-    Return:
-    - dict (hasil JSON) kalau JSON valid
-    - text string kalau bukan JSON
-    - None kalau body kosong
+    Prioritas sumber config:
+    1. current_app.config (jika ada Flask app context)
+    2. Config.* (dari .env / environment)
     """
-    base_url = current_app.config.get("ROUTER_ADMIN_BASE_URL")
-    admin_user = current_app.config.get("ROUTER_ADMIN_USER")
-    admin_pass = current_app.config.get("ROUTER_ADMIN_PASSWORD")
+
+    base_url = None
+    admin_user = None
+    admin_pass = None
+
+    # 1) Kalau dipanggil dari dalam Flask, pakai config app dulu
+    if has_app_context():
+        base_url = current_app.config.get("ROUTER_ADMIN_BASE_URL")
+        admin_user = current_app.config.get("ROUTER_ADMIN_USER")
+        admin_pass = current_app.config.get("ROUTER_ADMIN_PASSWORD")
+
+    # 2) Fallback ke Config (env/.env) untuk cron / script biasa
+    if not base_url:
+        base_url = getattr(Config, "ROUTER_ADMIN_BASE_URL", None)
+    if not admin_user:
+        admin_user = getattr(Config, "ROUTER_ADMIN_USER", None)
+    if not admin_pass:
+        admin_pass = getattr(Config, "ROUTER_ADMIN_PASSWORD", None)
 
     if not base_url:
-        raise RuntimeError("ROUTER_ADMIN_BASE_URL belum diset di Config.")
+        raise RuntimeError("ROUTER_ADMIN_BASE_URL belum diset di config/env.")
     if not admin_user or not admin_pass:
-        raise RuntimeError("ROUTER_ADMIN_USER/ROUTER_ADMIN_PASSWORD belum diset di Config.")
+        raise RuntimeError("ROUTER_ADMIN_USER/ROUTER_ADMIN_PASSWORD belum diset.")
 
-    url = f"{base_url.rstrip('/')}{path}"
+    # pastikan path diawali '/'
+    if not path.startswith("/"):
+        path = "/" + path
+
+    url = base_url.rstrip("/") + path
 
     resp = requests.request(
         method=method.upper(),
@@ -69,13 +82,15 @@ def _router_admin_request(
     if not resp.ok:
         raise RuntimeError(f"Router Admin error HTTP {resp.status_code}: {resp.text}")
 
-    if resp.text.strip() == "":
+    text = resp.text.strip()
+    if text == "":
         return None
 
     try:
         return resp.json()
     except Exception:
-        return resp.text
+        return text
+
 
 
 def _create_l2tp_secret_for_reseller(username: str, password: str) -> None:
@@ -224,66 +239,110 @@ def register():
                         return redirect(url_for("auth_reseller.login") + "?registered=1")
 
     body_html = """
-<h1>📝 Registrasi Reseller</h1>
+<div class="flex min-h-[60vh] items-center justify-center">
+  <div class="w-full max-w-lg space-y-5 rounded-xl border border-slate-800 bg-slate-900/80 p-6 shadow-lg">
+    <div class="space-y-1 text-center">
+      <h1 class="flex items-center justify-center gap-2 text-lg font-semibold">
+        <span>📝</span>
+        <span>Registrasi Reseller</span>
+      </h1>
+      <p class="text-xs text-slate-400">
+        Daftarkan akun reseller baru. Username dan password akan dipakai untuk PPP (L2TP) dan login panel ini.
+      </p>
+    </div>
 
-{% if error %}
-  <p style="color:#ff5555;">⚠️ {{ error }}</p>
-{% endif %}
+    {% if error %}
+      <div class="rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+        ⚠️ {{ error }}
+      </div>
+    {% endif %}
 
-{% if success %}
-  <p style="color:#00ff00;">✅ {{ success }}</p>
-{% endif %}
+    {% if success %}
+      <div class="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+        ✅ {{ success }}
+      </div>
+    {% endif %}
 
-<form method="post" style="margin-top:10px; max-width:420px;">
+    <form method="post" class="space-y-4">
+      <div class="space-y-1 text-sm">
+        <label class="block text-xs font-medium text-slate-300">
+          👤 Username (L2TP / PPP Name)
+        </label>
+        <input
+          type="text"
+          name="username"
+          value="{{ username or '' }}"
+          placeholder="misal: warganet"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+        >
+      </div>
 
-  <label>
-    👤 Username (L2TP / PPP Name)<br>
-    <input type="text" name="username" value="{{ username or '' }}"
-           placeholder="misal: r1net"
-           style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-  </label>
-  <br><br>
+      <div class="space-y-1 text-sm">
+        <label class="block text-xs font-medium text-slate-300">
+          🔒 Password
+        </label>
+        <input
+          type="password"
+          name="password"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+        >
+      </div>
 
-  <label>
-    🔒 Password<br>
-    <input type="password" name="password"
-           style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-  </label>
-  <br><br>
+      <div class="space-y-1 text-sm">
+        <label class="block text-xs font-medium text-slate-300">
+          🏷️ Nama Reseller (optional)
+        </label>
+        <input
+          type="text"
+          name="display_name"
+          value="{{ display_name or '' }}"
+          placeholder="misal: Warga NET"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+        >
+      </div>
 
-  <label>
-    🏷️ Nama Reseller (optional)<br>
-    <input type="text" name="display_name" value="{{ display_name or '' }}"
-           placeholder="misal: R1NET Fiber"
-           style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-  </label>
-  <br><br>
+      <div class="space-y-1 text-sm">
+        <label class="block text-xs font-medium text-slate-300">
+          📱 WA Number (optional)
+        </label>
+        <input
+          type="text"
+          name="wa_number"
+          value="{{ wa_number or '' }}"
+          placeholder="6285xxxx"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+        >
+      </div>
 
-  <label>
-    📱 WA Number (optional)<br>
-    <input type="text" name="wa_number" value="{{ wa_number or '' }}"
-           placeholder="6285xxxx"
-           style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-  </label>
-  <br><br>
+      <div class="space-y-1 text-sm">
+        <label class="block text-xs font-medium text-slate-300">
+          📧 Email (optional)
+        </label>
+        <input
+          type="email"
+          name="email"
+          value="{{ email or '' }}"
+          placeholder="email@example.com"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+        >
+      </div>
 
-  <label>
-    📧 Email (optional)<br>
-    <input type="email" name="email" value="{{ email or '' }}"
-           placeholder="email@example.com"
-           style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-  </label>
-  <br><br>
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
+        <button type="submit"
+                class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-4 py-2 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+          ✅ <span>Daftar</span>
+        </button>
 
-  <button type="submit"
-          style="padding:6px 12px; background:#001a00; color:#0f0;
-                 border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-    ✅ Daftar
-  </button>
-
-  <a href="{{ url_for('auth_reseller.login') }}" class="btn" style="margin-left:8px;">🔐 Sudah Punya Akun</a>
-</form>
+        <a href="{{ url_for('auth_reseller.login') }}"
+           class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+          🔐 <span>Sudah punya akun</span>
+        </a>
+      </div>
+    </form>
+  </div>
+</div>
     """
+
 
     return render_terminal_page(
         title="Registrasi Reseller",
@@ -400,55 +459,86 @@ add name={username}-l2tp \\
                     return redirect(url_for("index"))
 
     body_html = """
-<h1>🔐 Login Reseller</h1>
-<p>Masuk dengan <b>router_username</b> dan <b>router_password</b> yang telah didaftarkan.</p>
+<div class="flex min-h-[60vh] items-center justify-center">
+  <div class="w-full max-w-md space-y-5 rounded-xl border border-slate-800 bg-slate-900/80 p-6 shadow-lg">
+    <div class="space-y-1 text-center">
+      <h1 class="flex items-center justify-center gap-2 text-lg font-semibold">
+        <span>🔐</span>
+        <span>Login Reseller</span>
+      </h1>
+      <p class="text-xs text-slate-400">
+        Masuk dengan <span class="font-mono">router_username</span> dan <span class="font-mono">router_password</span> yang telah didaftarkan.
+      </p>
+    </div>
 
-{% if info %}
-  <p style="color:#00ff00;">ℹ️ {{ info }}</p>
-{% endif %}
+    {% if info %}
+      <div class="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+        ℹ️ {{ info }}
+      </div>
+    {% endif %}
 
-{% if error %}
-  <p style="color:#ff5555;">⚠️ {{ error }}</p>
-{% endif %}
+    {% if error %}
+      <div class="rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+        ⚠️ {{ error }}
+      </div>
+    {% endif %}
 
-{% if l2tp_script %}
-  <div style="margin-top:10px; padding:8px; border:1px dashed #ff5555;">
-    <p>
-      💡 <b>Petunjuk L2TP:</b><br>
-      Router Anda belum terdeteksi di Router Utama.<br>
-      Silakan jalankan script berikut di <b>terminal Mikrotik</b> (Winbox / SSH) untuk membuat
-      koneksi L2TP ke Router Utama, lalu coba login kembali.
-    </p>
-    <textarea readonly rows="8"
-              style="width:100%; padding:4px; background:#000; color:#0f0;
-                     border:1px solid #0f0; font-family:monospace;">{{ l2tp_script }}</textarea>
+    {% if l2tp_script %}
+      <div class="rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-xs text-amber-100 space-y-2">
+        <p class="text-[11px] leading-relaxed">
+          💡 <b>Petunjuk L2TP:</b><br>
+          Router Anda belum terdeteksi di Router Utama.<br>
+          Jalankan script berikut di <b>terminal Mikrotik</b> (Winbox / SSH), lalu coba login kembali.
+        </p>
+        <textarea readonly rows="8"
+                  class="w-full rounded border border-slate-700 bg-slate-950 p-2 text-[11px] font-mono text-slate-100">
+{{ l2tp_script }}
+        </textarea>
+      </div>
+    {% endif %}
+
+    <form method="post" class="space-y-4">
+      <div class="space-y-1 text-sm">
+        <label class="block text-xs font-medium text-slate-300">
+          👤 Username
+        </label>
+        <input
+          type="text"
+          name="username"
+          value="{{ username or '' }}"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+          placeholder="router_username"
+        >
+      </div>
+
+      <div class="space-y-1 text-sm">
+        <label class="block text-xs font-medium text-slate-300">
+          🔒 Password
+        </label>
+        <input
+          type="password"
+          name="password"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+          placeholder="router_password"
+        >
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-2 pt-2">
+        <button type="submit"
+                class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-4 py-2 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+          ▶️ <span>Login</span>
+        </button>
+
+        <a href="{{ url_for('auth_reseller.register') }}"
+           class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+          📝 <span>Daftar reseller baru</span>
+        </a>
+      </div>
+    </form>
   </div>
-{% endif %}
-
-<form method="post" style="margin-top:10px; max-width:360px;">
-  <label>
-    👤 Username<br>
-    <input type="text" name="username" value="{{ username or '' }}"
-           style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-  </label>
-  <br><br>
-
-  <label>
-    🔒 Password<br>
-    <input type="password" name="password"
-           style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-  </label>
-  <br><br>
-
-  <button type="submit"
-          style="padding:6px 12px; background:#001a00; color:#0f0;
-                 border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-    ▶️ Login
-  </button>
-
-  <a href="{{ url_for('auth_reseller.register') }}" class="btn" style="margin-left:8px;">📝 Daftar</a>
-</form>
+</div>
     """
+
 
     return render_terminal_page(
         title="Login Reseller",

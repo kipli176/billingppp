@@ -266,243 +266,369 @@ def list_customers():
 
     # ---------------- HTML ----------------
     body_html = """
-<h1>👤 PPP Customers</h1>
-<p>Reseller: <b>{{ reseller_name }}</b></p>
+<!-- HEADER HALAMAN -->
+<section class="flex flex-col gap-3 border-b border-slate-800 pb-4 md:flex-row md:items-center md:justify-between">
+  <div>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span>Home</span>
+      <span>›</span>
+      <span class="text-slate-300">Customers</span>
+    </div>
+    <h1 class="mt-1 flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <span>👤</span>
+      <span>PPP Customers</span>
+    </h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Daftar pelanggan PPP untuk reseller
+      <span class="font-medium text-slate-200">{{ reseller_name }}</span>.
+    </p>
+  </div>
 
+  <div class="flex flex-wrap gap-2">
+    <!-- Sinkron Customers -->
+    <form method="post"
+          action="{{ url_for('customers.sync_customers') }}"
+          class="inline-flex">
+      <button type="submit"
+              class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+        🔄 <span>Sinkron Customers</span>
+      </button>
+    </form>
+
+    <!-- Tambah Customer -->
+    <a href="{{ url_for('customers.create_customer') }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      ➕ <span>Tambah Customer</span>
+    </a>
+  </div>
+</section>
+
+<!-- ALERTS -->
 {% if router_error %}
-  <p style="color:#ff5555;">⚠️ Router: {{ router_error }}</p>
+  <div class="mt-3 rounded-md border border-rose-500/70 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+    ⚠️ Router: {{ router_error }}
+  </div>
 {% endif %}
 {% if error %}
-  <p style="color:#ff5555;">⚠️ {{ error }}</p>
+  <div class="mt-3 rounded-md border border-rose-500/70 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+    ⚠️ {{ error }}
+  </div>
 {% endif %}
 {% if db_error %}
-  <p style="color:#ff5555;">⚠️ {{ db_error }}</p>
+  <div class="mt-3 rounded-md border border-amber-500/70 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+    ⚠️ {{ db_error }}
+  </div>
 {% endif %}
 {% if success %}
-  <p style="color:#00ff00;">✅ {{ success }}</p>
+  <div class="mt-3 rounded-md border border-emerald-500/70 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+    ✅ {{ success }}
+  </div>
 {% endif %}
 
-<div style="margin-bottom:8px;">
-  <form method="post" action="{{ url_for('customers.sync_customers') }}" style="display:inline-block; margin-right:8px;">
-    <button type="submit"
-            style="padding:4px 10px; background:#001a00; color:#0f0;
-                   border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-      🔄 Sinkron Customers
-    </button>
-  </form>
+<!-- FILTER & RINGKASAN -->
+<section class="mt-4 space-y-3">
+  <!-- Filter bar -->
+  <div class="rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+    <form method="get"
+          action="{{ url_for('customers.list_customers') }}"
+          class="grid gap-3 text-xs md:grid-cols-2 lg:grid-cols-4 lg:items-end">
 
-  <a href="{{ url_for('customers.create_customer') }}" class="btn" style="margin-right:4px;">➕ Tambah Customer</a> 
-</div>
+      <!-- Status -->
+      <div class="space-y-1">
+        <label class="block text-[11px] font-medium text-slate-300">Status</label>
+        <select name="status"
+                class="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none">
+          <option value="all" {% if status_filter=='all' %}selected{% endif %}>All</option>
+          <option value="paid" {% if status_filter=='paid' %}selected{% endif %}>Paid</option>
+          <option value="unpaid" {% if status_filter=='unpaid' %}selected{% endif %}>Unpaid</option>
+          <option value="isolated" {% if status_filter=='isolated' %}selected{% endif %}>Isolated</option>
+          <option value="disabled" {% if status_filter=='disabled' %}selected{% endif %}>Disabled</option>
+        </select>
+      </div>
 
-<div style="border:1px solid #0f0; padding:6px; margin-bottom:8px;">
-  <form method="get" action="{{ url_for('customers.list_customers') }}" style="font-size:12px;">
-    <span>Status:</span>
-    <select name="status"
-            style="background:#000; color:#0f0; border:1px solid #0f0; margin-right:6px;">
-      <option value="all" {% if status_filter=='all' %}selected{% endif %}>All</option>
-      <option value="paid" {% if status_filter=='paid' %}selected{% endif %}>Paid</option>
-      <option value="unpaid" {% if status_filter=='unpaid' %}selected{% endif %}>Unpaid</option>
-      <option value="isolated" {% if status_filter=='isolated' %}selected{% endif %}>Isolated</option>
-      <option value="disabled" {% if status_filter=='disabled' %}selected{% endif %}>Disabled</option>
-    </select>
+      <!-- Petugas -->
+      <div class="space-y-1">
+        <label class="block text-[11px] font-medium text-slate-300">Petugas</label>
+        <input type="text"
+               name="petugas"
+               value="{{ petugas_q or '' }}"
+               placeholder="nama petugas"
+               class="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none">
+      </div>
 
-    <span>Petugas:</span>
-    <input type="text" name="petugas" value="{{ petugas_q or '' }}"
-           placeholder="nama petugas"
-           style="background:#000; color:#0f0; border:1px solid #0f0; padding:2px; width:140px; margin-right:6px;">
+      <!-- Pencarian -->
+      <div class="space-y-1">
+        <label class="block text-[11px] font-medium text-slate-300">Cari</label>
+        <input type="text"
+               name="q"
+               value="{{ q or '' }}"
+               placeholder="username / nama / WA"
+               class="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none">
+      </div>
 
-    <span>Cari:</span>
-    <input type="text" name="q" value="{{ q or '' }}"
-           placeholder="username / nama / WA"
-           style="background:#000; color:#0f0; border:1px solid #0f0; padding:2px; width:180px; margin-right:6px;">
+      <!-- Per halaman + submit -->
+      <div class="flex items-end gap-2">
+        <div class="flex-1 space-y-1">
+          <label class="block text-[11px] font-medium text-slate-300">Per halaman</label>
+          <input type="text"
+                 name="per_page"
+                 value="{{ per_page }}"
+                 class="w-full rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none">
+        </div>
+        <div class="pb-1">
+          <button type="submit"
+                  class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+            🔍 <span>Tampilkan</span>
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
 
-    <span>Per halaman:</span>
-    <input type="text" name="per_page" value="{{ per_page }}"
-           style="background:#000; color:#0f0; border:1px solid #0f0; padding:2px; width:40px; margin-right:6px;">
+  <!-- Ringkasan angka -->
+  <div class="text-[11px] text-slate-400">
+    <div>
+      Total pelanggan (sesuai filter):
+      <span class="font-semibold text-slate-100">{{ total_rows }}</span> ·
+      Ditampilkan halaman ini:
+      <span class="font-semibold text-slate-100">{{ customers|length }}</span> ·
+      Online:
+      <span class="font-semibold text-emerald-300">{{ online_count }}</span> ·
+      Offline:
+      <span class="font-semibold text-slate-200">{{ offline_count }}</span>
+    </div>
+    <div class="mt-1">
+      Lunas:
+      <span class="font-semibold text-emerald-300">{{ paid_count }}</span>
+      <span class="text-slate-300"> (Rp {{ '{:,.0f}'.format(paid_total or 0) }})</span> ·
+      Unpaid:
+      <span class="font-semibold text-amber-300">{{ unpaid_count }}</span>
+      <span class="text-slate-300"> (Rp {{ '{:,.0f}'.format(unpaid_total or 0) }})</span>
+    </div>
+    <div class="mt-1">
+      Halaman
+      <span class="font-semibold text-slate-100">{{ page }}</span>
+      dari
+      <span class="font-semibold text-slate-100">{{ total_pages }}</span>.
+    </div>
+  </div>
+</section>
 
-    <button type="submit"
-            style="padding:2px 8px; background:#001a00; color:#0f0;
-                   border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-      🔍 Tampilkan
-    </button>
-  </form>
-</div>
-
-<div style="font-size:12px; margin-bottom:4px;">
-  Total pelanggan (sesuai filter): <b>{{ total_rows }}</b> |
-  Ditampilkan halaman ini: <b>{{ customers|length }}</b> |
-  Online: <b>{{ online_count }}</b> |
-  Offline: <b>{{ offline_count }}</b><br>
-  Lunas: <b>{{ paid_count }}</b>
-  (Rp {{ '{:,.0f}'.format(paid_total or 0) }}) |
-  Unpaid: <b>{{ unpaid_count }}</b>
-  (Rp {{ '{:,.0f}'.format(unpaid_total or 0) }})<br>
-  Halaman {{ page }} dari {{ total_pages }}.
-</div>
-
-
-<div style="margin-bottom:6px;">
+<!-- PAGINASI -->
+<section class="mt-3 flex flex-wrap gap-2">
   {% if page > 1 %}
-    <a href="{{ url_for('customers.list_customers', status=status_filter, q=q, petugas=petugas_q, per_page=per_page, page=page-1) }}" class="btn">⬅️ Prev</a>
+    <a href="{{ url_for('customers.list_customers', status=status_filter, q=q, petugas=petugas_q, per_page=per_page, page=page-1) }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      ⬅️ <span>Prev</span>
+    </a>
   {% endif %}
   {% if page < total_pages %}
-    <a href="{{ url_for('customers.list_customers', status=status_filter, q=q, petugas=petugas_q, per_page=per_page, page=page+1) }}" class="btn">Next ➡️</a>
+    <a href="{{ url_for('customers.list_customers', status=status_filter, q=q, petugas=petugas_q, per_page=per_page, page=page+1) }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      <span>Next</span> ➡️
+    </a>
   {% endif %}
-</div>
+</section>
 
-<div style="border:1px solid #0f0; padding:8px; margin-top:4px; max-height:1310px; overflow:auto;">
-  <h3>Daftar Pelanggan PPP</h3>
+<!-- TABEL CUSTOMERS -->
+<section class="mt-4 rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+  <div class="mb-2 flex items-center justify-between">
+    <h2 class="text-sm font-semibold text-slate-200">Daftar Pelanggan PPP</h2>
+    <span class="text-[11px] text-slate-500">Aksi cepat: edit, suspend, bayar, hapus.</span>
+  </div>
 
   {% if customers %}
-    <table>
-      <tr>
-        <th>Aksi</th>
-        <th>Nama</th>
-        <th>Username</th>
-        <th>Alamat</th>
-        <th>Harga</th>
-        <th>Status</th>
-        <th>Online</th>
-        <th>Petugas</th>
-      </tr>
-      {% for c in customers %}
-      <tr>
-        <!-- Aksi -->
-        <td style="white-space:nowrap;">
+    <div class="overflow-x-auto">
+      <table class="min-w-full border-collapse text-xs">
+        <thead>
+          <tr class="border-b border-slate-800 bg-slate-900">
+            <th class="px-2 py-2 text-left font-medium text-slate-300">Aksi</th>
+            <th class="px-2 py-2 text-left font-medium text-slate-300">Nama</th>
+            <th class="px-2 py-2 text-left font-medium text-slate-300">Username</th>
+            <th class="px-2 py-2 text-left font-medium text-slate-300">Alamat</th>
+            <th class="px-2 py-2 text-right font-medium text-slate-300">Harga</th>
+            <th class="px-2 py-2 text-left font-medium text-slate-300">Online</th>
+            <th class="px-2 py-2 text-left font-medium text-slate-300">Petugas</th>
+            <th class="px-2 py-2 text-left font-medium text-slate-300">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in customers %}
+          <tr class="border-b border-slate-800/70 hover:bg-slate-900/60">
+            <!-- Aksi -->
+            <td class="px-1 py-1 align-top whitespace-nowrap">
+                <div class="flex flex-nowrap gap-1 overflow-x-auto text-[9px]">
+                    <!-- Edit -->
+                    <a href="{{ url_for('customers.edit_customer', customer_id=c.customer_id) }}"
+                    class="inline-flex items-center gap-1 rounded border border-sky-500/70 bg-sky-500/10 px-2 py-1 text-sky-200 hover:bg-sky-500/20"
+                    title="Edit">
+                    ✏️ 
+                    </a>
 
-          <!-- Edit -->
-          <a href="{{ url_for('customers.edit_customer', customer_id=c.customer_id) }}"
-             class="btn btn-info" style="font-size:11px; padding:2px 4px;">
-            ✏️
-          </a>
+                    <!-- Terminate -->
+                    <form method="post"
+                        action="{{ url_for('customers.terminate_customer', customer_id=c.customer_id) }}"
+                        onsubmit="return confirm('Terminate session PPP {{ c.ppp_username }} sekarang?');">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
+                            title="Terminate PPP">
+                        ⏹ <span>Rest</span>
+                    </button>
+                    </form>
 
-          <!-- Terminate -->
-          <form method="post"
-                action="{{ url_for('customers.terminate_customer', customer_id=c.customer_id) }}"
-                style="display:inline;"
-                onsubmit="return confirm('Terminate session PPP {{ c.ppp_username }} sekarang?');">
-            <button type="submit" class="btn btn-danger" style="font-size:11px; padding:2px 4px;color:#0f0;">
-              ⏹ Kill
-            </button>
-          </form>
+                    <!-- Toggle Enabled -->
+                    <form method="post"
+                        action="{{ url_for('customers.toggle_enable_customer', customer_id=c.customer_id) }}"
+                        onsubmit="return confirm('Ubah status enable/disable user {{ c.ppp_username }}?');">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                            title="Enable / Disable">
+                        {% if c.is_enabled %}🚫 <span>Off</span>{% else %}✅ <span>On</span>{% endif %}
+                    </button>
+                    </form>
 
-          <!-- Toggle Enabled -->
-          <form method="post"
-                action="{{ url_for('customers.toggle_enable_customer', customer_id=c.customer_id) }}"
-                style="display:inline;"
-                onsubmit="return confirm('Ubah status enable/disable user {{ c.ppp_username }}?');">
-            <button type="submit" class="btn" style="font-size:11px; padding:2px 4px;color:#0f0;">
-              {% if c.is_enabled %}🚫 Disable{% else %}✅ Enable{% endif %}
-            </button>
-          </form>
+                    <!-- Suspend / Unsuspend -->
+                    {% if not c.is_isolated %}
+                    <form method="post"
+                            action="{{ url_for('customers.isolate_customer', customer_id=c.customer_id) }}"
+                            onsubmit="return confirm('Suspend (isolate) user {{ c.ppp_username }} ke profil isolasi?');">
+                        <button type="submit"
+                                class="inline-flex items-center gap-1 rounded border border-amber-500/70 bg-amber-500/10 px-2 py-1 text-amber-200 hover:bg-amber-500/20"
+                                title="Suspend / Isolate">
+                        🧊 <span>Susp</span>
+                        </button>
+                    </form>
+                    {% else %}
+                    <form method="post"
+                            action="{{ url_for('customers.unisolate_customer', customer_id=c.customer_id) }}"
+                            onsubmit="return confirm('Unsuspend user {{ c.ppp_username }} ke profil normal?');">
+                        <button type="submit"
+                                class="inline-flex items-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 text-emerald-200 hover:bg-emerald-500/20"
+                                title="Unsuspend">
+                        ⬅️ <span>Unsusp</span>
+                        </button>
+                    </form>
+                    {% endif %}
 
-          <!-- Suspend / Unsuspend -->
-          {% if not c.is_isolated %}
-            <form method="post"
-                  action="{{ url_for('customers.isolate_customer', customer_id=c.customer_id) }}"
-                  style="display:inline;"
-                  onsubmit="return confirm('Suspend (isolate) user {{ c.ppp_username }} ke profil isolasi?');">
-              <button type="submit" class="btn" style="font-size:11px; padding:2px 4px;color:#0f0;">
-                🧊 Suspend
-              </button>
-            </form>
-          {% else %}
-            <form method="post"
-                  action="{{ url_for('customers.unisolate_customer', customer_id=c.customer_id) }}"
-                  style="display:inline;"
-                  onsubmit="return confirm('Unsuspend (kembalikan) user {{ c.ppp_username }} ke profil normal?');">
-              <button type="submit" class="btn btn-danger" style="font-size:11px; padding:2px 4px;">
-                ⬅️ Unsuspend
-              </button>
-            </form>
-          {% endif %}
+                    <!-- Bayar / Batalkan bayar -->
+                    {% if c.has_paid_current_period %}
+                    <form method="post"
+                            action="{{ url_for('customers.cancel_pay_customer', customer_id=c.customer_id) }}"
+                            onsubmit="return confirm('Batalkan 1 bulan pembayaran terakhir untuk {{ c.ppp_username }}?');">
+                        <input type="hidden" name="months" value="1">
+                        <button type="submit"
+                                class="inline-flex items-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
+                                title="Batalkan bayar">
+                        ↩️ <span>Unpaid</span>
+                        </button>
+                    </form>
+                    {% else %}
+                    <form method="post"
+                            action="{{ url_for('customers.pay_customer', customer_id=c.customer_id) }}"
+                            onsubmit="return confirm('Catat pembayaran 1 bulan untuk {{ c.ppp_username }}?');">
+                        <input type="hidden" name="months" value="1">
+                        <button type="submit"
+                                class="inline-flex items-center gap-1 rounded border border-green-400/70 bg-green-400/10 px-2 py-1 text-green-200 hover:bg-green-400/20"
+                                title="Tandai sudah bayar">
+                        💰 <span>Paid</span>
+                        </button>
+                    </form>
+                    {% endif %}
 
-          <!-- Bayar / Batalkan bayar 1 bulan -->
-          {% if c.has_paid_current_period %}
-            <form method="post"
-                  action="{{ url_for('customers.cancel_pay_customer', customer_id=c.customer_id) }}"
-                  style="display:inline;"
-                  onsubmit="return confirm('Batalkan 1 bulan pembayaran terakhir untuk {{ c.ppp_username }}?');">
-              <input type="hidden" name="months" value="1">
-              <button type="submit" class="btn btn-danger" style="font-size:11px; padding:2px 4px;color:#0f0;">
-                ↩️ Unpaid
-              </button>
-            </form>
-          {% else %}
-            <form method="post"
-                  action="{{ url_for('customers.pay_customer', customer_id=c.customer_id) }}"
-                  style="display:inline;"
-                  onsubmit="return confirm('Catat pembayaran 1 bulan untuk {{ c.ppp_username }}?');">
-              <input type="hidden" name="months" value="1">
-              <button type="submit" class="btn btn-warning" style="font-size:11px; padding:2px 4px;color:#0f0;">
-                💰 Paid
-              </button>
-            </form>
-          {% endif %}
+                    <!-- Delete -->
+                    <form method="post"
+                        action="{{ url_for('customers.delete_customer', customer_id=c.customer_id) }}"
+                        onsubmit="return confirm('Yakin hapus user {{ c.ppp_username }} dari DB dan Mikrotik?');">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 rounded border border-rose-600/80 bg-rose-600/10 px-2 py-1 text-rose-200 hover:bg-rose-600/25"
+                            title="Hapus">
+                        🗑 
+                    </button>
+                    </form>
+                </div>
+                </td>
 
-          <!-- Delete -->
-          <form method="post"
-                action="{{ url_for('customers.delete_customer', customer_id=c.customer_id) }}"
-                style="display:inline;"
-                onsubmit="return confirm('Yakin hapus user {{ c.ppp_username }} dari DB dan Mikrotik?');">
-            <button type="submit" class="btn btn-danger" style="font-size:11px; padding:2px 4px;">
-              🗑 Del
-            </button>
-          </form>
-        </td>
-        <!-- Nama -->
-        <td style="text-transform: uppercase;">{{ c.full_name or '-' }}</td>
 
-        <!-- Username -->
-        <td>{{ c.ppp_username }}</td>
+            <!-- Nama -->
+            <td class="px-2 py-1 align-top uppercase text-slate-100">
+              {{ c.full_name or '-' }}
+            </td>
 
-        <!-- Alamat -->
-        <td style="text-transform: uppercase;">{{ c.address or '-' }}</td>
+            <!-- Username -->
+            <td class="px-2 py-1 align-top font-mono text-slate-100">
+              {{ c.ppp_username }}
+            </td>
 
-        <!-- Harga -->
-        <td>{{ '{:,.0f}'.format(c.monthly_price or 0) }}</td>
+            <!-- Alamat -->
+            <td class="px-2 py-1 align-top uppercase text-slate-300">
+              {{ c.address or '-' }}
+            </td>
 
-        <!-- Status singkat -->
-        <td>
-          {% if c.payment_status_text == 'paid_current_period' %}
-            Lunas
-          {% elif c.payment_status_text == 'unpaid_current_period' %}
-            Unpaid
-          {% elif c.payment_status_text == 'isolated' %}
-            Iso
-          {% elif c.payment_status_text == 'never_paid' %}
-            Baru
-          {% else %}
-            {{ c.payment_status_text }}
-          {% endif %}
-        </td>
+            <!-- Harga -->
+            <td class="px-2 py-1 align-top text-right text-slate-100">
+              {{ '{:,.0f}'.format(c.monthly_price or 0) }}
+            </td>
 
-        <!-- Online -->
-        <td>
-          {% if c.is_online %}
-            🟢 ON
-          {% else %}
-            🔴OFF
-          {% endif %}
-        </td>
+            <!-- Online -->
+            <td class="px-2 py-1 align-top">
+              {% if c.is_online %}
+                <span class="inline-flex items-center gap-1 text-[11px] text-emerald-300">
+                  <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span> ON
+                </span>
+              {% else %}
+                <span class="inline-flex items-center gap-1 text-[11px] text-slate-400">
+                  <span class="h-1.5 w-1.5 rounded-full bg-rose-500"></span> OFF
+                </span>
+              {% endif %}
+            </td>
 
-        <!-- Petugas -->
-        <td>{{ c.petugas_name or '-' }}</td>
+            <!-- Petugas -->
+            <td class="px-2 py-1 align-top text-slate-200">
+              {{ c.petugas_name or '-' }}
+            </td>
 
-      </tr>
-      {% endfor %}
-    </table>
+            <!-- Status singkat -->
+            <td class="px-2 py-1 align-top">
+              {% if c.payment_status_text == 'paid_current_period' %}
+                <span class="inline-flex items-center rounded-full border border-emerald-500/70 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
+                  Lunas
+                </span>
+              {% elif c.payment_status_text == 'unpaid_current_period' %}
+                <span class="inline-flex items-center rounded-full border border-amber-500/70 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">
+                  Unpaid
+                </span>
+              {% elif c.payment_status_text == 'isolated' %}
+                <span class="inline-flex items-center rounded-full border border-sky-500/70 bg-sky-500/10 px-2 py-0.5 text-[11px] text-sky-300">
+                  Iso
+                </span>
+              {% elif c.payment_status_text == 'never_paid' %}
+                <span class="inline-flex items-center rounded-full border border-slate-500/70 bg-slate-800/70 px-2 py-0.5 text-[11px] text-slate-200">
+                  Baru
+                </span>
+              {% else %}
+                <span class="text-[11px] text-slate-300">
+                  {{ c.payment_status_text }}
+                </span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p>Tidak ada customer di database. Coba klik "Sinkron Customers".</p>
+    <p class="text-xs text-slate-400">
+      Tidak ada customer di database. Coba klik <b>"Sinkron Customers"</b>.
+    </p>
   {% endif %}
-</div>
 
-<pre style="font-size:12px; opacity:0.8; margin-top:8px;">
-Catatan singkat:
-- Status: Lunas / Unpaid / Iso / Baru.
-- Suspend/Unsuspend muncul isolir pada klien.
-- Online diambil dari /ppp/active.
-</pre>
+  <p class="mt-3 text-[11px] text-slate-500">
+    Catatan singkat:<br>
+    • Status: Lunas / Unpaid / Iso / Baru.<br>
+    • Suspend/Unsuspend akan mengubah profil ke isolasi / normal dan terlihat di sisi klien.<br>
+    • Status Online diambil dari <code>/ppp/active</code> pada router.
+  </p>
+</section>
     """
 
     return render_terminal_page(
@@ -784,108 +910,212 @@ def create_customer():
         is_enabled_raw = "1"
 
     body_html = """
-<h1>➕ Tambah Customer PPP</h1>
-<p>Reseller: <b>{{ reseller_name }}</b></p>
+<!-- HEADER -->
+<section class="flex flex-col gap-3 border-b border-slate-800 pb-4">
+  <div>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span>Home</span>
+      <span>›</span>
+      <a href="{{ url_for('customers.list_customers') }}" class="hover:text-emerald-300">Customers</a>
+      <span>›</span>
+      <span class="text-slate-300">Tambah</span>
+    </div>
+    <h1 class="mt-1 flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <span>➕</span>
+      <span>Tambah Customer PPP</span>
+    </h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Reseller: <span class="font-medium text-slate-200">{{ reseller_name }}</span>
+    </p>
+  </div>
+</section>
 
+<!-- ALERT -->
 {% if error %}
-  <p style="color:#ff5555;">⚠️ {{ error }}</p>
+  <div class="mt-4 rounded-md border border-rose-500/70 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+    ⚠️ {{ error }}
+  </div>
 {% endif %}
 {% if success %}
-  <p style="color:#00ff00;">✅ {{ success }}</p>
+  <div class="mt-4 rounded-md border border-emerald-500/70 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+    ✅ {{ success }}
+  </div>
 {% endif %}
 
-<form method="post" style="max-width:520px; margin-top:10px;">
-  <fieldset style="border:1px solid #0f0; padding:8px; margin-bottom:8px;">
-    <legend style="font-size:12px;">PPP Secret</legend>
+<!-- FORM -->
+<form method="post" class="mt-4 space-y-4 max-w-xl">
 
-    <label>
-      PPP Username<br>
-      <input type="text" name="ppp_username"
-             value="{{ ppp_username }}"
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+  <!-- PPP SECRET -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">🔑 PPP Secret</h3>
 
-    <label>
-      PPP Password<br>
-      <input type="password" name="ppp_password"
-             value="{{ ppp_password }}"
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          PPP Username
+        </label>
+        <input
+          type="text"
+          name="ppp_username"
+          value="{{ ppp_username }}"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
 
-    <label>
-      Profile<br>
-      <select name="profile_id"
-              style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-        <option value="">-- pilih profile --</option>
-        {% for p in profiles %}
-          <option value="{{ p.id }}" {% if profile_id_raw|int == p.id %}selected{% endif %}>
-            {{ p.name }}
-          </option>
-        {% endfor %}
-      </select>
-    </label>
-    <br><br>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          PPP Password
+        </label>
+        <input
+          type="text"
+          name="ppp_password"
+          value="{{ ppp_password }}"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
+    </div>
+  </section>
 
-    <label>
-      Status User<br>
-      <input type="radio" name="is_enabled" value="1" {% if is_enabled_raw=='1' %}checked{% endif %}> Enable
-      &nbsp;&nbsp;
-      <input type="radio" name="is_enabled" value="0" {% if is_enabled_raw=='0' %}checked{% endif %}> Disable
-    </label>
-  </fieldset>
+  <!-- PROFIL & STATUS -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">📡 Profil PPP &amp; Status</h3>
 
-  <fieldset style="border:1px solid #0f0; padding:8px; margin-bottom:8px;">
-    <legend style="font-size:12px;">Data Pelanggan</legend>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Profil PPP
+        </label>
+        <select
+          name="profile_id"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+          <option value="">-- pilih profile --</option>
+          {% for p in profiles %}
+            <option value="{{ p.id }}" {% if profile_id_raw|int == p.id %}selected{% endif %}>
+              {{ p.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
 
-    <label>
-      Nama Lengkap<br>
-      <input type="text" name="full_name"
-             value="{{ full_name }}"
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+      <div class="space-y-1">
+        <span class="block text-xs font-medium text-slate-300">Status User</span>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-200">
+          <label class="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="is_enabled"
+              value="1"
+              {% if is_enabled_raw=='1' %}checked{% endif %}
+              class="h-3 w-3 rounded border-slate-600 bg-slate-900"
+            >
+            <span>Enable</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="is_enabled"
+              value="0"
+              {% if is_enabled_raw=='0' %}checked{% endif %}
+              class="h-3 w-3 rounded border-slate-600 bg-slate-900"
+            >
+            <span>Disable</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <label>
-      Alamat<br>
-      <textarea name="address"
-                style="width:100%; height:60px; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">{{ address }}</textarea>
-    </label>
-    <br><br>
+  <!-- DATA PELANGGAN -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">👤 Data Pelanggan</h3>
 
-    <label>
-      No. WhatsApp<br>
-      <input type="text" name="wa_number"
-             value="{{ wa_number }}"
-             style="width:60%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Nama Lengkap
+        </label>
+        <input
+          type="text"
+          name="full_name"
+          value="{{ full_name }}"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
 
-    <label>
-      Nama Petugas<br>
-      <input type="text" name="petugas_name"
-             value="{{ petugas_name }}"
-             style="width:60%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Alamat
+        </label>
+        <textarea
+          name="address"
+          rows="3"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >{{ address }}</textarea>
+      </div>
 
-    <label>
-  Billing Start Date<br>
-  <input type="date" name="billing_start_date"
-         value="{{ today.strftime('%Y-%m-%d') }}"
-         style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-</label>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          No. WhatsApp
+        </label>
+        <input
+          type="text"
+          name="wa_number"
+          value="{{ wa_number }}"
+          placeholder="6285xxxx"
+          class="w-52 max-w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
 
-  </fieldset>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Nama Petugas
+        </label>
+        <input
+          type="text"
+          name="petugas_name"
+          value="{{ petugas_name }}"
+          class="w-52 max-w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
+    </div>
+  </section>
 
-  <button type="submit"
-          style="padding:6px 12px; background:#001a00; color:#0f0;
-                 border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-    💾 Simpan Customer
-  </button>
+  <!-- BILLING -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">💳 Billing</h3>
 
-  <a href="{{ url_for('customers.list_customers') }}" class="btn" style="margin-left:8px;">⬅️ Kembali</a>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Billing Start Date
+        </label>
+        <input
+          type="date"
+          name="billing_start_date"
+          value="{{ billing_start_raw or today.strftime('%Y-%m-%d') }}"
+          class="w-52 max-w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
+      <p class="text-[11px] text-slate-500">
+        Tanggal ini akan digunakan sebagai acuan awal periode tagihan untuk customer ini.
+      </p>
+    </div>
+  </section>
+
+  <!-- TOMBOL AKSI -->
+  <div class="flex flex-wrap items-center gap-2 pt-1">
+    <button
+      type="submit"
+      class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-4 py-2 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+      💾 <span>Simpan Customer</span>
+    </button>
+
+    <a href="{{ url_for('customers.list_customers') }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      ⬅️ <span>Kembali</span>
+    </a>
+  </div>
 </form>
     """
 
@@ -1454,117 +1684,212 @@ def edit_customer(customer_id: int):
             )
 
     body_html = """
-<h1>✏️ Edit Customer</h1>
-<p>Reseller: <b>{{ reseller_name }}</b></p>
-<p>User PPP: <b>{{ cust.ppp_username }}</b></p>
+<!-- HEADER -->
+<section class="flex flex-col gap-3 border-b border-slate-800 pb-4">
+  <div>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span>Home</span>
+      <span>›</span>
+      <a href="{{ url_for('customers.list_customers') }}" class="hover:text-emerald-300">Customers</a>
+      <span>›</span>
+      <span class="text-slate-300">Edit</span>
+    </div>
+    <h1 class="mt-1 flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <span>✏️</span>
+      <span>Edit Customer</span>
+    </h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Reseller: <span class="font-medium text-slate-200">{{ reseller_name }}</span><br>
+      User PPP: <span class="font-mono text-emerald-300">{{ cust.ppp_username }}</span>
+    </p>
+  </div>
+</section>
 
 {% if error %}
-  <p style="color:#ff5555;">⚠️ {{ error }}</p>
+  <div class="mt-4 rounded-md border border-rose-500/70 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+    ⚠️ {{ error }}
+  </div>
 {% endif %}
 {% if success %}
-  <p style="color:#00ff00;">✅ {{ success }}</p>
+  <div class="mt-4 rounded-md border border-emerald-500/70 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+    ✅ {{ success }}
+  </div>
 {% endif %}
 
-<form method="post" style="max-width:520px; margin-top:10px;">
-  <fieldset style="border:1px solid #0f0; padding:8px; margin-bottom:8px;">
-    <legend style="font-size:12px;">PPP Secret</legend>
+<form method="post" class="mt-4 space-y-4 max-w-xl">
 
-        <label>
-      PPP Username<br>
-      <input type="text"
-             value="{{ cust.ppp_username or '' }}"
-             readonly
-             style="width:100%; padding:4px; background:#222; color:#0f0; border:1px solid #0f0;">
-    </label>
+  <!-- PPP SECRET -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">🔑 PPP Secret</h3>
 
-    <br><br>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          PPP Username
+        </label>
+        <input
+          type="text"
+          name="ppp_username"
+          value="{{ cust.ppp_username }}"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
 
-    <label>
-      PPP Password (kosongkan jika tidak diubah)<br>
-      <input type="password" name="ppp_password"
-             value=""
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          PPP Password <span class="text-slate-400">(biarkan kosong jika tidak diubah)</span>
+        </label>
+        <input
+          type="password"
+          name="ppp_password"
+          value=""
+          placeholder="••••••••"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
+    </div>
+  </section>
 
-    <label>
-      Profile<br>
-      <select name="profile_id"
-              style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-        <option value="">-- tanpa profile (sesuai router) --</option>
-        {% for p in profiles %}
-          <option value="{{ p.id }}" {% if cust.profile_id == p.id %}selected{% endif %}>
-            {{ p.name }}
-          </option>
-        {% endfor %}
-      </select>
-    </label>
-    <br><br>
+  <!-- PROFIL & STATUS -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">📡 Profil PPP &amp; Status</h3>
 
-    <label>
-      Status User<br>
-      <input type="radio" name="is_enabled" value="1" {% if cust.is_enabled %}checked{% endif %}> Enable
-      &nbsp;&nbsp;
-      <input type="radio" name="is_enabled" value="0" {% if not cust.is_enabled %}checked{% endif %}> Disable
-    </label>
-  </fieldset>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Profil PPP
+        </label>
+        <select
+          name="profile_id"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+          <option value="">-- pilih profile --</option>
+          {% for p in profiles %}
+            <option value="{{ p.id }}" {% if cust.profile_id == p.id %}selected{% endif %}>
+              {{ p.name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
 
-  <fieldset style="border:1px solid #0f0; padding:8px; margin-bottom:8px;">
-    <legend style="font-size:12px;">Data Pelanggan</legend>
+      <div class="space-y-1">
+        <span class="block text-xs font-medium text-slate-300">Status User</span>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-200">
+          <label class="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="is_enabled"
+              value="1"
+              {% if cust.is_enabled %}checked{% endif %}
+              class="h-3 w-3 rounded border-slate-600 bg-slate-900"
+            >
+            <span>Enable</span>
+          </label>
+          <label class="inline-flex items-center gap-2">
+            <input
+              type="radio"
+              name="is_enabled"
+              value="0"
+              {% if not cust.is_enabled %}checked{% endif %}
+              class="h-3 w-3 rounded border-slate-600 bg-slate-900"
+            >
+            <span>Disable</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <label>
-      Nama Lengkap<br>
-      <input type="text" name="full_name"
-             value="{{ cust.full_name or '' }}"
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+  <!-- DATA PELANGGAN -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">👤 Data Pelanggan</h3>
 
-    <label>
-      Alamat<br>
-      <textarea name="address"
-                style="width:100%; height:60px; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">{{ cust.address or '' }}</textarea>
-    </label>
-    <br><br>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Nama Lengkap
+        </label>
+        <input
+          type="text"
+          name="full_name"
+          value="{{ cust.full_name or '' }}"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
 
-    <label>
-      No. WhatsApp<br>
-      <input type="text" name="wa_number"
-             value="{{ cust.wa_number or '' }}"
-             style="width:60%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Alamat
+        </label>
+        <textarea
+          name="address"
+          rows="3"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >{{ cust.address or '' }}</textarea>
+      </div>
 
-    <label>
-      Nama Petugas<br>
-      <input type="text" name="petugas_name"
-             value="{{ cust.petugas_name or '' }}"
-             style="width:60%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          No. WhatsApp
+        </label>
+        <input
+          type="text"
+          name="wa_number"
+          value="{{ cust.wa_number or '' }}"
+          placeholder="6285xxxx"
+          class="w-52 max-w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
 
-    <label>
-  Billing Start Date<br>
-  <input type="date" name="billing_start_date"
-         value="{% if cust.billing_start_date %}{{ cust.billing_start_date.strftime('%Y-%m-%d') }}{% endif %}"
-         style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-</label>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Nama Petugas
+        </label>
+        <input
+          type="text"
+          name="petugas_name"
+          value="{{ cust.petugas_name or '' }}"
+          class="w-52 max-w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
+    </div>
+  </section>
 
-    <br><br>
+  <!-- BILLING -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">💳 Billing</h3>
 
-    <p style="font-size:12px; opacity:0.8;">
-      last_paid_period saat ini: <b>{{ cust.last_paid_period or '-' }}</b><br>
-      (Perubahan pembayaran dilakukan lewat tombol 💰 di halaman daftar customers.)
-    </p>
-  </fieldset>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          Billing Start Date
+        </label>
+        <input
+          type="date"
+          name="billing_start_date"
+          value="{{ cust.billing_start_date or '' }}"
+          class="w-52 max-w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+        >
+      </div>
+      <p class="text-[11px] text-slate-500">
+        Tanggal ini digunakan sebagai acuan awal periode tagihan customer ini.
+      </p>
+    </div>
+  </section>
 
-  <button type="submit"
-          style="padding:6px 12px; background:#001a00; color:#0f0;
-                 border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-    💾 Simpan Perubahan
-  </button>
+  <!-- TOMBOL AKSI -->
+  <div class="flex flex-wrap items-center gap-2 pt-1">
+    <button
+      type="submit"
+      class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-4 py-2 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+      💾 <span>Simpan Perubahan</span>
+    </button>
 
-  <a href="{{ url_for('customers.list_customers') }}" class="btn" style="margin-left:8px;">⬅️ Kembali</a>
+    <a href="{{ url_for('customers.list_customers') }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      ⬅️ <span>Kembali</span>
+    </a>
+  </div>
 </form>
     """
 

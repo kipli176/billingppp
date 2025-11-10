@@ -133,55 +133,95 @@ def dashboard():
     # Kalau terkunci invoice → tampilkan hanya info invoice + WA admin
     if locked_by_invoice:
         body_html = """
-<h1>📑 Invoice Bulan Ini (WAJIB DIBAYAR)</h1>
-<p>Reseller: <b>{{ reseller_name }}</b></p>
+<section class="mt-6 rounded-lg border border-amber-500/60 bg-amber-500/10 p-6 shadow-md">
+  <h1 class="flex items-center gap-2 text-lg font-semibold text-amber-300 mb-2">
+    <span>📑</span>
+    <span>Invoice Bulan Ini (WAJIB DIBAYAR)</span>
+  </h1>
+  <p class="text-sm text-amber-100 mb-4">
+    ⚠️ Sistem dikunci karena invoice bulan ini belum dibayar.<br>
+    Silakan selesaikan pembayaran ke admin agar fitur lain aktif kembali.
+  </p>
 
-<p style="color:#ff5555; font-weight:bold;">
-  ⚠️ Sistem dikunci karena invoice bulan ini belum dibayar.
-  Silakan selesaikan pembayaran ke admin agar fitur lain aktif kembali.
-</p>
+  {% if db_error %}
+    <div class="mb-3 rounded-md border border-rose-500/70 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+      ⚠️ DB info: {{ db_error }}
+    </div>
+  {% endif %}
 
-{% if db_error %}
-  <p style="color:#ff5555;">⚠️ DB info: {{ db_error }}</p>
-{% endif %}
-
-{% if invoice %}
-  <div style="border:1px solid #0f0; padding:8px; max-width:720px;">
-    <table>
-      <tr><th>ID Invoice</th><td>{{ invoice.invoice_id }}</td></tr>
-      <tr><th>Periode</th><td>{{ invoice.period_start }} s/d {{ invoice.period_end }}</td></tr>
-      <tr><th>Status</th>
-        <td>
-          {% if invoice.status == 'paid' %}
-            ✅ PAID
-          {% elif invoice.status == 'overdue' %}
-            ⏰ OVERDUE
-          {% else %}
-            ⏳ {{ invoice.status }}
-          {% endif %}
-        </td>
-      </tr>
-      <tr><th>Total Enabled Users</th><td>{{ invoice.total_enabled_users }}</td></tr>
-      <tr><th>Tarif/User</th><td>Rp {{ '{:,.0f}'.format(invoice.price_per_user) }}</td></tr>
-      <tr><th>Total Tagihan</th><td>Rp {{ '{:,.0f}'.format(invoice.total_amount) }}</td></tr>
-      <tr><th>Jatuh Tempo</th><td>{{ invoice.due_date }}</td></tr>
-      <tr><th>Link Pembayaran (WA admin)</th>
-        <td>
-          <a href="{{ wa_pay_url }}" class="btn" target="_blank">
-            💬 Chat Admin untuk Bayar
-          </a>
-        </td>
-      </tr>
+  {% if invoice %}
+  <div class="rounded-md border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
+    <table class="min-w-full border-collapse text-xs">
+      <tbody>
+        <tr class="border-b border-slate-800/60">
+          <th class="py-1 pr-3 text-left text-slate-400">ID Invoice</th>
+          <td class="py-1 font-mono text-slate-100">{{ invoice.invoice_id }}</td>
+        </tr>
+        <tr class="border-b border-slate-800/60">
+          <th class="py-1 pr-3 text-left text-slate-400">Periode</th>
+          <td class="py-1 text-slate-100">
+            {{ invoice.period_start }} s/d {{ invoice.period_end }}
+          </td>
+        </tr>
+        <tr class="border-b border-slate-800/60">
+          <th class="py-1 pr-3 text-left text-slate-400">Status</th>
+          <td class="py-1">
+            {% if invoice.status == 'paid' %}
+              <span class="inline-flex items-center rounded-full border border-emerald-500/70 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
+                ✅ PAID
+              </span>
+            {% elif invoice.status == 'overdue' %}
+              <span class="inline-flex items-center rounded-full border border-amber-500/70 bg-amber-500/10 px-2 py-0.5 text-[11px] text-amber-300">
+                ⏰ OVERDUE
+              </span>
+            {% else %}
+              <span class="inline-flex items-center rounded-full border border-slate-500/70 bg-slate-800/50 px-2 py-0.5 text-[11px] text-slate-300">
+                ⏳ {{ invoice.status }}
+              </span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr class="border-b border-slate-800/60">
+          <th class="py-1 pr-3 text-left text-slate-400">Total Enabled Users</th>
+          <td class="py-1 font-mono">{{ invoice.total_enabled_users }}</td>
+        </tr>
+        <tr class="border-b border-slate-800/60">
+          <th class="py-1 pr-3 text-left text-slate-400">Tarif/User</th>
+          <td class="py-1 text-slate-100">
+            Rp {{ '{:,.0f}'.format(invoice.price_per_user) }}
+          </td>
+        </tr>
+        <tr class="border-b border-slate-800/60">
+          <th class="py-1 pr-3 text-left text-slate-400">Total Tagihan</th>
+          <td class="py-1 font-semibold text-amber-300">
+            Rp {{ '{:,.0f}'.format(invoice.total_amount) }}
+          </td>
+        </tr>
+        <tr class="border-b border-slate-800/60">
+          <th class="py-1 pr-3 text-left text-slate-400">Jatuh Tempo</th>
+          <td class="py-1 text-slate-100">{{ invoice.due_date }}</td>
+        </tr>
+        <tr>
+          <th class="py-1 pr-3 text-left text-slate-400">Link Pembayaran (WA Admin)</th>
+          <td class="py-1">
+            <a href="{{ wa_pay_url }}" target="_blank"
+               class="inline-flex items-center gap-1 rounded-md border border-emerald-500 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20">
+              💬 Chat Admin untuk Bayar
+            </a>
+          </td>
+        </tr>
+      </tbody>
     </table>
   </div>
-{% else %}
-  <p>Invoice bulan ini tidak ditemukan, hubungi admin.</p>
-{% endif %}
+  {% else %}
+    <p class="mt-3 text-sm text-slate-400">Invoice bulan ini tidak ditemukan, hubungi admin.</p>
+  {% endif %}
 
-<p style="margin-top:10px; font-size:12px; opacity:0.8;">
-  Setelah pembayaran dikonfirmasi oleh admin,
-  status invoice akan diubah menjadi <b>PAID</b> dan dashboard akan terbuka kembali.
-</p>
+  <p class="mt-4 text-xs text-slate-400">
+    Setelah pembayaran dikonfirmasi oleh admin,
+    status invoice akan diubah menjadi <b class="text-emerald-300">PAID</b> dan dashboard akan terbuka kembali.
+  </p>
+</section>
         """
 
         return render_terminal_page(
@@ -330,289 +370,290 @@ def dashboard():
     # HTML body untuk dashboard (tanpa menu cepat, profil di bawah summary)
     # ------------------------------------------------------------------
     body_html = """ 
-<h1>🏠 Dashboard</h1>
-<p>Reseller: <b>{{ reseller_name }}</b></p>
-
-<style>
-  .dash-row {
-    display:flex;
-    flex-wrap:wrap;
-    gap:12px;
-    margin-top:8px;
-  }
-  .card {
-    flex:1 1 260px;
-    border:1px solid #0f0;
-    padding:10px;
-    box-sizing:border-box;
-    background:#000;
-  }
-  .card h3 {
-    margin:0 0 6px 0;
-    font-size:14px;
-  }
-  .small-text {
-    font-size:11px;
-    opacity:0.8;
-  }
-  .metric-label {
-    font-size:11px;
-    opacity:0.8;
-  }
-  .metric-value {
-    font-size:16px;
-    font-weight:bold;
-  }
-  .meter {
-    margin-top:3px;
-    height:9px;
-    border:1px solid #0f0;
-    background:#001000;
-    overflow:hidden;
-  }
-  .meter-fill {
-    display:block;
-    height:100%;
-    width:0;
-    background:#0f0;
-    transition:width 0.4s ease-out;
-  }
-  .meter-fill.hot {
-    background:#ff5555;
-  }
-  .badge-onoff {
-    display:inline-block;
-    padding:1px 6px;
-    border-radius:8px;
-    border:1px solid #0f0;
-    font-size:10px;
-    margin-left:4px;
-  }
-  .badge-off {
-    opacity:0.6;
-  }
-  .kpi-row {
-    display:flex;
-    flex-wrap:wrap;
-    gap:6px;
-    margin-top:6px;
-  }
-  .kpi {
-    flex:1 1 70px;
-    border:1px solid #0f0;
-    padding:4px;
-    text-align:center;
-  }
-  .kpi-title {
-    font-size:10px;
-    opacity:0.8;
-  }
-  .kpi-number {
-    font-size:16px;
-    font-weight:bold;
-  }
-  .kpi-paid {
-    border-color:#00ff00;
-  }
-  .kpi-unpaid {
-    border-color:#ffb86c;
-  }
-  .kpi-isolated {
-    border-color:#ff5555;
-  }
-  .kpi-disabled {
-    border-color:#6272a4;
-  }
-</style>
-
-{% if router_error %}
-  <p style="color:#ff5555;">⚠️ Router error: {{ router_error }}</p>
-{% endif %}
-
-{% if db_error %}
-  <p style="color:#ff5555;">⚠️ DB info: {{ db_error }}</p>
-{% endif %}
-
-<div class="dash-row">
-
-    <!-- CARD 1: ROUTER STATUS -->
-  <div class="card">
-    <h3>📡 Router Status</h3>
-    <div class="small-text">
-      <div>IP: <b id="router-ip">{{ router_ip }}</b></div>
-      <div>Identity: <b id="router-name">{{ router_name }}</b></div>
-      <div>Uptime: <span id="router-uptime">{{ uptime }}</span></div>
-      <div>Active PPP: <span id="router-active-ppp">{{ active_ppp_count if active_ppp_count is not none else 'N/A' }}</span></div>
+<!-- PAGE HEADER -->
+<section class="flex flex-col gap-3 border-b border-slate-800 pb-4 md:flex-row md:items-center md:justify-between">
+  <div>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span>Home</span>
+      <span>›</span>
+      <span class="text-slate-300">Dashboard</span>
     </div>
-
-    <div style="margin-top:8px;">
-      <div class="metric-label">CPU Load</div>
-      <div class="metric-value" id="cpu-value">
-        {{ cpu_load }}{% if cpu_load != 'N/A' %}%{% endif %}
-      </div>
-      <div class="meter">
-        <span class="meter-fill {% if cpu_percent and cpu_percent >= 80 %}hot{% endif %}"
-              id="cpu-meter-fill"
-              style="width: {{ cpu_percent or 0 }}%;"></span>
-      </div>
-    </div>
-
-    <div style="margin-top:8px;">
-      <div class="metric-label">Memory</div>
-      <div class="small-text" id="mem-text">{{ mem_display }}</div>
-      <div class="meter" style="margin-top:3px;">
-        <span class="meter-fill"
-              id="mem-meter-fill"
-              style="width: {{ mem_used_pct or 0 }}%;"></span>
-      </div>
-    </div>
-
-    <p style="margin-top:8px;">
-      <a href="{{ url_for('main.dashboard') }}" class="btn">🔄 Refresh</a>
-      <span class="small-text" id="last-update" style="margin-left:6px; opacity:0.7;">
-        live update...
-      </span>
+    <h1 class="mt-1 flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <span>🏠</span>
+      <span>Dashboard</span>
+    </h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Ringkasan status router dan pelanggan PPP untuk reseller
+      <span class="font-medium text-slate-200">{{ reseller_name }}</span>.
     </p>
   </div>
 
+  <!-- Action buttons -->
+  <div class="flex flex-wrap gap-2">
+    <button
+      type="button"
+      onclick="fetchStats()"
+      class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+      🔄 <span>Refresh status</span>
+    </button>
+    <a href="{{ url_for('reseller_settings.settings') }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      ⚙️ <span>Settings</span>
+    </a>
+  </div>
+</section>
+
+{% if db_error %}
+  <div class="mt-3 rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+    ⚠️ {{ db_error }}
+  </div>
+{% endif %}
+{% if router_error %}
+  <div class="mt-3 rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+    ⚠️ {{ router_error }}
+  </div>
+{% endif %}
+
+<!-- GRID KARTU ATAS -->
+<section class="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+
+  <!-- CARD 1: ROUTER STATUS -->
+  <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
+    <div class="flex items-center justify-between gap-2">
+      <h2 class="text-sm font-semibold text-slate-200">📡 Router Status</h2>
+      <span class="inline-flex items-center gap-1 rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-300">
+        <span class="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+        Live
+      </span>
+    </div>
+    <dl class="mt-3 space-y-1 text-xs text-slate-300">
+      <div class="flex justify-between">
+        <dt>IP</dt>
+        <dd id="router-ip" class="font-mono text-emerald-300">{{ router_ip }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt>Identity</dt>
+        <dd id="router-name" class="font-mono text-slate-200">{{ router_name }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt>Uptime</dt>
+        <dd id="router-uptime" class="font-mono text-slate-200">{{ uptime }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt>Active PPP</dt>
+        <dd id="router-active-ppp" class="font-mono text-emerald-300">
+          {% if active_ppp_count is not none %}
+            {{ active_ppp_count }}
+          {% else %}
+            N/A
+          {% endif %}
+        </dd>
+      </div>
+    </dl>
+
+    <div class="mt-4 space-y-3 text-xs">
+      <div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">CPU Load</span>
+          <span id="cpu-value" class="font-mono text-emerald-300">
+            {% if cpu_load == "N/A" %}N/A{% else %}{{ cpu_load }}%{% endif %}
+          </span>
+        </div>
+        <div class="mt-1 h-1.5 overflow-hidden rounded-full border border-slate-700 bg-slate-950">
+          <div id="cpu-meter-fill"
+               class="h-full bg-emerald-500"
+               style="width: {% if cpu_percent is not none %}{{ cpu_percent }}{% else %}0{% endif %}%;">
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="flex justify-between">
+          <span class="text-slate-400">Memory</span>
+          <span id="mem-text" class="font-mono text-emerald-300">{{ mem_display }}</span>
+        </div>
+        <div class="mt-1 h-1.5 overflow-hidden rounded-full border border-slate-700 bg-slate-950">
+          <div id="mem-meter-fill"
+               class="h-full bg-emerald-500"
+               style="width: {% if mem_used_pct is not none %}{{ mem_used_pct }}{% else %}0{% endif %}%;">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <p class="mt-3 text-[11px] text-slate-500" id="last-update">
+      live update...
+    </p>
+  </div>
 
   <!-- CARD 2: RESELLER INFO -->
-  <div class="card">
-    <h3>🧩 Reseller Info</h3>
-    <table>
-      <tr><th style="padding-right:8px;">Nama</th><td>{{ reseller_name }}</td></tr>
-      <tr><th>WA</th><td>{{ reseller_wa or '-' }}</td></tr>
-      <tr><th>Email</th><td>{{ reseller_email or '-' }}</td></tr>
-      <tr>
-        <th>Notif WA</th>
-        <td>
+  <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
+    <h2 class="text-sm font-semibold text-slate-200">🧩 Reseller Info</h2>
+    <dl class="mt-3 space-y-1 text-xs text-slate-300">
+      <div class="flex justify-between">
+        <dt>Nama</dt>
+        <dd class="font-medium text-slate-100">{{ reseller_name }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt>WA</dt>
+        <dd class="font-mono text-emerald-300">{{ reseller_wa or '-' }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt>Email</dt>
+        <dd class="text-emerald-300">{{ reseller_email or '-' }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt>Notif WA</dt>
+        <dd>
           {% if use_notifications %}
-            ON<span class="badge-onoff">aktif</span>
+            <span class="inline-flex items-center rounded-full border border-emerald-500/70 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
+              ON · aktif
+            </span>
           {% else %}
-            OFF<span class="badge-onoff badge-off">nonaktif</span>
+            <span class="inline-flex items-center rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
+              OFF · nonaktif
+            </span>
           {% endif %}
-        </td>
-      </tr>
-      <tr>
-        <th>Auto Payment</th>
-        <td>
+        </dd>
+      </div>
+      <div class="flex justify-between">
+        <dt>Auto Payment</dt>
+        <dd>
           {% if use_auto_payment %}
-            ON<span class="badge-onoff">aktif</span>
+            <span class="inline-flex items-center rounded-full border border-emerald-500/70 bg-emerald-500/10 px-2 py-0.5 text-[11px] text-emerald-300">
+              ON · aktif
+            </span>
           {% else %}
-            OFF<span class="badge-onoff badge-off">nonaktif</span>
+            <span class="inline-flex items-center rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300">
+              OFF · nonaktif
+            </span>
           {% endif %}
-        </td>
-      </tr>
-      <tr>
-        <th>Unpaid (bulan ini)</th>
-        <td>{{ unpaid_count }} user<br>
-          <span class="small-text">Total: Rp {{ '{:,.0f}'.format(unpaid_total) }}</span>
-        </td>
-      </tr>
-    </table>
-
-    <p style="margin-top:8px;">
-      <a href="{{ url_for('reseller_settings.settings') }}" class="btn">⚙️ Settings</a>
+        </dd>
+      </div>
+    </dl>
+    <p class="mt-3 text-xs text-slate-400">
+      Unpaid bulan ini:
+      <span class="font-mono text-amber-300">{{ unpaid_count }} user</span><br>
+      <span class="text-amber-300">Rp {{ "{:,.0f}".format(unpaid_total) }}</span>
     </p>
   </div>
 
   <!-- CARD 3: USER SUMMARY -->
-  <div class="card">
-    <h3>👤 User Summary</h3>
-
-    <div class="kpi-row">
-      <div class="kpi">
-        <div class="kpi-title">Total</div>
-        <div class="kpi-number">{{ total_users }}</div>
+  <div class="rounded-lg border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
+    <h2 class="text-sm font-semibold text-slate-200">👤 User Summary</h2>
+    <div class="mt-3 grid grid-cols-2 gap-2 text-center text-xs">
+      <div class="rounded-md border border-slate-700 px-2 py-2">
+        <div class="text-slate-400">Total</div>
+        <div class="mt-1 text-lg font-semibold text-slate-100">{{ total_users }}</div>
       </div>
-      <div class="kpi kpi-paid">
-        <div class="kpi-title">Paid</div>
-        <div class="kpi-number">{{ paid_users }}</div>
+      <div class="rounded-md border border-emerald-500/70 px-2 py-2">
+        <div class="text-slate-400">Paid</div>
+        <div class="mt-1 text-lg font-semibold text-emerald-300">{{ paid_users }}</div>
       </div>
-      <div class="kpi kpi-unpaid">
-        <div class="kpi-title">Unpaid</div>
-        <div class="kpi-number">{{ unpaid_users }}</div>
+      <div class="rounded-md border border-amber-400/80 px-2 py-2">
+        <div class="text-slate-400">Unpaid</div>
+        <div class="mt-1 text-lg font-semibold text-amber-300">{{ unpaid_users }}</div>
       </div>
-      <div class="kpi kpi-isolated">
-        <div class="kpi-title">Isolated</div>
-        <div class="kpi-number">{{ isolated_users }}</div>
+      <div class="rounded-md border border-rose-500/80 px-2 py-2">
+        <div class="text-slate-400">Isolated</div>
+        <div class="mt-1 text-lg font-semibold text-rose-300">{{ isolated_users }}</div>
       </div>
-      <div class="kpi kpi-disabled">
-        <div class="kpi-title">Disabled</div>
-        <div class="kpi-number">{{ disabled_users }}</div>
-      </div>
+      <!--div class="col-span-2 rounded-md border border-slate-500 px-2 py-2">
+        <div class="text-slate-400">Disabled</div>
+        <div class="mt-1 text-lg font-semibold text-slate-200">{{ disabled_users }}</div>
+      </div-->
     </div>
-
-    <p class="small-text" style="margin-top:6px;">
-      Ringkasan status user untuk periode berjalan.
+    <p class="mt-3 text-xs text-slate-400">
+      Status berdasarkan periode pembayaran berjalan.
     </p>
   </div>
+</section>
 
-</div>
-
-<hr>
-
-<div style="border:1px solid #0f0; padding:8px; margin-top:6px;">
-  <h3>📡 PPP Profiles</h3>
+<!-- PPP PROFILES -->
+<section class="mt-6 rounded-lg border border-slate-800 bg-slate-900/60 p-4 shadow-sm">
+  <div class="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+    <div>
+      <h2 class="text-sm font-semibold text-slate-200">📡 PPP Profiles</h2>
+      <p class="text-xs text-slate-400">
+        Profil PPP dari router &amp; harga per bulan untuk billing.
+      </p>
+    </div>
+    <form method="post" action="{{ url_for('main.sync_profiles_dashboard') }}">
+      <button type="submit"
+              class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+        🔄 <span>Sinkron Profil dari Router</span>
+      </button>
+    </form>
+  </div>
 
   {% if profile_error %}
-    <p style="color:#ff5555;">⚠️ {{ profile_error }}</p>
+    <p class="mb-2 text-xs text-rose-300">⚠️ {{ profile_error }}</p>
   {% endif %}
   {% if profile_success %}
-    <p style="color:#00ff00;">✅ {{ profile_success }}</p>
+    <p class="mb-2 text-xs text-emerald-300">✅ {{ profile_success }}</p>
   {% endif %}
-
-  <form method="post" action="{{ url_for('main.sync_profiles_dashboard') }}" style="margin-bottom:8px;">
-    <button type="submit"
-            style="padding:4px 10px; background:#001a00; color:#0f0;
-                   border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-      🔄 Sinkron Profil dari Router
-    </button>
-  </form>
 
   {% if profiles %}
-    <table>
-      <tr>
-        <th>Nama Profil</th>
-        <th>Rate Limit</th>
-        <th>Isolation?</th>
-        <th>Harga /bulan</th>
-        <th>Total User</th>
-        <th>Aksi</th>
-      </tr>
-      {% for p in profiles %}
-      <tr>
-        <form method="post" action="{{ url_for('main.update_profile_dashboard', profile_id=p.profile_id) }}">
-          <td>{{ p.profile_name }}</td>
-          <td>{{ p.rate_limit or '-' }}</td>
-          <td>
-            <input type="checkbox" name="is_isolation"
-                   {% if p.is_isolation %}checked{% endif %}>
-          </td>
-          <td>
-            <input type="text" name="monthly_price"
-                   value="{{ p.monthly_price or 0 }}"
-                   style="width:90px; padding:2px; background:#000; color:#0f0; border:1px solid #0f0; text-align:right;">
-          </td>
-          <td>{{ p.total_customers }}</td>
-          <td style="white-space:nowrap;">
-            <button type="submit" class="btn" style="font-size:11px; padding:2px 4px;color:#0f0;">💾 Simpan</button>
-          </td>
-        </form>
-      </tr>
-      {% endfor %}
-    </table>
+    <div class="overflow-x-auto">
+      <table class="min-w-full border-collapse text-xs">
+        <thead>
+          <tr class="border-b border-slate-800 bg-slate-900">
+            <th class="px-3 py-2 text-left font-medium text-slate-300">Nama Profil</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-300">Rate Limit</th>
+            <th class="px-3 py-2 text-center font-medium text-slate-300">Isolation?</th>
+            <th class="px-3 py-2 text-right font-medium text-slate-300">Harga /bulan</th>
+            <th class="px-3 py-2 text-right font-medium text-slate-300">Total User</th>
+            <th class="px-3 py-2 text-left font-medium text-slate-300">Aksi</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in profiles %}
+            <tr class="border-b border-slate-800/70 hover:bg-slate-900/60">
+              <form method="post" action="{{ url_for('main.update_profile_dashboard', profile_id=p.profile_id) }}">
+                <td class="px-3 py-2 align-top">{{ p.profile_name }}</td>
+                <td class="px-3 py-2 align-top font-mono text-[11px] text-slate-300">
+                  {{ p.rate_limit or "-" }}
+                </td>
+                <td class="px-3 py-2 align-top text-center">
+                  <input type="checkbox"
+                         name="is_isolation"
+                         {% if p.is_isolation %}checked{% endif %}
+                         class="h-3 w-3 rounded border-slate-600 bg-slate-900" />
+                </td>
+                <td class="px-3 py-2 align-top text-right">
+                  <input type="text"
+                         name="monthly_price"
+                         value="{{ p.monthly_price or 0 }}"
+                         class="w-24 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-right font-mono text-[11px] text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0" />
+                </td>
+                <td class="px-3 py-2 align-top text-right">
+                  {{ p.total_customers or 0 }}
+                </td>
+                <td class="px-3 py-2 align-top">
+                  <button type="submit"
+                          class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] font-medium text-slate-200 hover:border-emerald-500 hover:text-emerald-300">
+                    💾 Simpan
+                  </button>
+                </td>
+              </form>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   {% else %}
-    <p>Tidak ada profil di database. Coba klik "Sinkron Profil dari Router".</p>
+    <p class="text-xs text-slate-400">
+      Tidak ada profil di database. Coba klik <b>Sinkron Profil dari Router</b>.
+    </p>
   {% endif %}
-</div>
 
-<pre style="font-size:12px; opacity:0.8; margin-top:8px;">
-Catatan:
-- Sinkron profil akan membaca /ppp/profile di router, lalu menambah/update ke tabel ppp_profiles.
-- Edit di kolom "Isolation?" dan "Harga/bulan" hanya mengubah data billing di database,
-  tidak mengubah setting router secara langsung.
-</pre>
+  <p class="mt-3 text-[11px] text-slate-500">
+    Catatan: Sinkron profil akan membaca <code>/ppp/profile</code> di router, lalu menambah/update ke tabel
+    <code>ppp_profiles</code>. Edit kolom "Isolation?" dan "Harga/bulan" hanya mengubah data billing di database,
+    tidak mengubah setting router secara langsung.
+  </p>
+</section>
+
+<!-- SCRIPT: LIVE STATS -->
 <script>
   async function fetchStats() {
     try {
@@ -627,7 +668,6 @@ Catatan:
         return;
       }
 
-      // Update teks dasar
       const ipEl = document.getElementById("router-ip");
       const nameEl = document.getElementById("router-name");
       const uptimeEl = document.getElementById("router-uptime");
@@ -639,7 +679,6 @@ Catatan:
         activePppEl.textContent = data.active_ppp_count;
       }
 
-      // CPU value + bar
       const cpuValueEl = document.getElementById("cpu-value");
       const cpuBarEl = document.getElementById("cpu-meter-fill");
       if (cpuValueEl) {
@@ -654,16 +693,8 @@ Catatan:
         if (isNaN(pct) || pct < 0) pct = 0;
         if (pct > 100) pct = 100;
         cpuBarEl.style.width = pct + "%";
-
-        // toggle warna merah kalau panas
-        if (pct >= 80) {
-          cpuBarEl.classList.add("hot");
-        } else {
-          cpuBarEl.classList.remove("hot");
-        }
       }
 
-      // Memory text + bar
       const memTextEl = document.getElementById("mem-text");
       const memBarEl = document.getElementById("mem-meter-fill");
       if (memTextEl && data.mem_display !== undefined) {
@@ -676,7 +707,6 @@ Catatan:
         memBarEl.style.width = mpct + "%";
       }
 
-      // Info waktu update
       const lastUpdateEl = document.getElementById("last-update");
       if (lastUpdateEl) {
         const now = new Date();
@@ -685,21 +715,16 @@ Catatan:
         const ss = String(now.getSeconds()).padStart(2, "0");
         lastUpdateEl.textContent = "updated " + hh + ":" + mm + ":" + ss;
       }
-
     } catch (err) {
-      // boleh diabaikan atau console.log(err)
-      // console.log(err);
+      // optional: console.log(err);
     }
   }
 
-  // pertama kali saat halaman load
   window.addEventListener("load", function() {
     fetchStats();
-    // interval tiap 3 detik, silakan diubah
     setInterval(fetchStats, 3000);
   });
 </script>
-
     """
 
 

@@ -103,87 +103,148 @@ def settings():
                 error = f"Gagal menyimpan pengaturan: {e}"
 
     body_html = """
-<h1>⚙️ Pengaturan Reseller</h1>
+<section class="flex flex-col gap-3 border-b border-slate-800 pb-4">
+  <div>
+    <div class="flex items-center gap-2 text-xs text-slate-500">
+      <span>Home</span>
+      <span>›</span>
+      <span class="text-slate-300">Settings</span>
+    </div>
+    <h1 class="mt-1 flex items-center gap-2 text-xl font-semibold tracking-tight">
+      <span>⚙️</span>
+      <span>Pengaturan Reseller</span>
+    </h1>
+    <p class="mt-1 text-sm text-slate-400">
+      Atur profil reseller, kontak, dan fitur otomatis untuk notifikasi &amp; pembayaran.
+    </p>
+  </div>
+</section>
 
 {% if error %}
-  <p style="color:#ff5555;">⚠️ {{ error }}</p>
+  <div class="mt-4 rounded-md border border-rose-500/70 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+    ⚠️ {{ error }}
+  </div>
 {% endif %}
 
 {% if success %}
-  <p style="color:#00ff00;">✅ {{ success }}</p>
+  <div class="mt-4 rounded-md border border-emerald-500/70 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+    ✅ {{ success }}
+  </div>
 {% endif %}
 
-<div style="border:1px solid #0f0; padding:8px; margin-bottom:10px; max-width:600px;">
-  <h3>📡 Info Router</h3>
-  <table>
-    <tr>
-      <th>Router Username</th>
-      <td>{{ router_username }}</td>
-    </tr>
-    <tr>
-      <th>Router IP (L2TP address)</th>
-      <td>{{ router_ip or '-' }}</td>
-    </tr>
-  </table>
-</div>
+<!-- INFO ROUTER -->
+<section class="mt-4 rounded-lg border border-slate-800 bg-slate-900/70 p-4 max-w-xl">
+  <h3 class="mb-2 text-sm font-semibold text-slate-200">📡 Info Router</h3>
+  <dl class="space-y-1 text-xs text-slate-300">
+    <div class="flex justify-between gap-2">
+      <dt class="text-slate-400">Router Username</dt>
+      <dd class="font-mono text-slate-100">{{ router_username }}</dd>
+    </div>
+    <div class="flex justify-between gap-2">
+      <dt class="text-slate-400">Router IP (L2TP address)</dt>
+      <dd class="font-mono text-emerald-300">{{ router_ip or '-' }}</dd>
+    </div>
+  </dl>
+</section>
 
-<form method="post" style="max-width:600px;">
+<!-- FORM PENGATURAN -->
+<form method="post" class="mt-4 space-y-4 max-w-xl">
 
-  <div style="border:1px solid #0f0; padding:8px; margin-bottom:10px;">
-    <h3>🧩 Profil Reseller</h3>
+  <!-- Profil Reseller -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">🧩 Profil Reseller</h3>
 
-    <label>
-      🏷️ Nama Reseller<br>
-      <input type="text" name="display_name" value="{{ display_name or '' }}"
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+    <div class="space-y-3 text-sm">
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          🏷️ Nama Reseller
+        </label>
+        <input
+          type="text"
+          name="display_name"
+          value="{{ display_name or '' }}"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+          placeholder="misal: Warga NET"
+        >
+      </div>
 
-    <label>
-      📱 WA Number<br>
-      <input type="text" name="wa_number" value="{{ wa_number or '' }}"
-             placeholder="6285xxxx"
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-    <br><br>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          📱 WA Number
+        </label>
+        <input
+          type="text"
+          name="wa_number"
+          value="{{ wa_number or '' }}"
+          placeholder="6285xxxx"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+        >
+      </div>
 
-    <label>
-      📧 Email<br>
-      <input type="email" name="email" value="{{ email or '' }}"
-             placeholder="email@example.com"
-             style="width:100%; padding:4px; background:#000; color:#0f0; border:1px solid #0f0;">
-    </label>
-  </div>
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-slate-300">
+          📧 Email
+        </label>
+        <input
+          type="email"
+          name="email"
+          value="{{ email or '' }}"
+          placeholder="email@example.com"
+          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0"
+        >
+      </div>
+    </div>
+  </section>
 
-  <div style="border:1px solid #0f0; padding:8px; margin-bottom:10px;">
-    <h3>🔔 Fitur Otomatis</h3>
+  <!-- Fitur Otomatis -->
+  <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">🔔 Fitur Otomatis</h3>
 
-    <label style="display:block; margin-bottom:6px;">
-      <input type="checkbox" name="use_notifications" {% if use_notifications %}checked{% endif %}
-             style="margin-right:4px;">
-      Aktifkan notifikasi WA ke pelanggan
-    </label>
+    <div class="space-y-2 text-sm">
+      <label class="flex items-start gap-2 text-xs text-slate-200">
+        <input
+          type="checkbox"
+          name="use_notifications"
+          {% if use_notifications %}checked{% endif %}
+          class="mt-0.5 h-3 w-3 rounded border-slate-600 bg-slate-900"
+        >
+        <span>Aktifkan notifikasi WA ke pelanggan</span>
+      </label>
 
-    <label style="display:block; margin-bottom:6px;">
-      <input type="checkbox" name="use_auto_payment" {% if use_auto_payment %}checked{% endif %}
-             style="margin-right:4px;">
-      Aktifkan integrasi pembayaran otomatis (duitku) <span style="opacity:0.7;">(opsional / nanti)</span>
-    </label>
+      <label class="flex items-start gap-2 text-xs text-slate-200">
+        <input disabled
+          type="checkbox"
+          name="use_auto_payment"
+          {% if use_auto_payment %}checked{% endif %}
+          class="mt-0.5 h-3 w-3 rounded border-slate-600 bg-slate-900"
+        >
+        <span>
+          Aktifkan integrasi pembayaran otomatis (duitku)
+          <span class="text-slate-400">(opsional / nanti)</span>
+        </span>
+      </label>
+    </div>
 
-    <p style="font-size:12px; opacity:0.8; margin-top:8px;">
+    <p class="mt-3 text-[11px] text-slate-500 leading-relaxed">
       Catatan:<br>
       - Jika notifikasi WA diaktifkan, cron akan mengirim pesan otomatis untuk tagihan jatuh tempo.<br>
       - Jika auto payment diaktifkan, invoice bisa memiliki link pembayaran online (fitur menyusul).
     </p>
+  </section>
+
+  <!-- Tombol Aksi -->
+  <div class="flex flex-wrap items-center gap-2 pt-1">
+    <button
+      type="submit"
+      class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-4 py-2 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
+      💾 <span>Simpan Pengaturan</span>
+    </button>
+
+    <a href="{{ url_for('main.dashboard') }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      🏠 <span>Kembali ke Dashboard</span>
+    </a>
   </div>
-
-  <button type="submit"
-          style="padding:6px 12px; background:#001a00; color:#0f0;
-                 border:1px solid #0f0; border-radius:4px; cursor:pointer;">
-    💾 Simpan Pengaturan
-  </button>
-
-  <a href="{{ url_for('main.dashboard') }}" class="btn" style="margin-left:8px;">🏠 Kembali ke Dashboard</a>
 </form>
     """
 
