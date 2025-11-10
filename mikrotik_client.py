@@ -4,7 +4,7 @@ mikrotik_client.py
 Fungsi helper untuk call REST API RouterOS (MikroTik).
 
 Semua fungsi di sini mengharapkan:
-- router_host      : IP atau host router (tanpa /rest)
+- router_host        : IP atau host router (tanpa /rest)
 - api_user, api_pass : user/password REST di router tersebut
 
 HTTP client pakai requests (basic auth).
@@ -185,6 +185,31 @@ def create_ppp_secret(
     return data or {}
 
 
+# -----------------------------------------------------------------------------
+# Helper khusus PPP secret (berdasarkan name -> .id)
+# -----------------------------------------------------------------------------
+
+def _find_ppp_secret_id_by_name(
+    router_host: str,
+    api_user: str,
+    api_pass: str,
+    secret_name: str,
+    use_https: bool = False,
+) -> Optional[str]:
+    """
+    Cari .id PPP secret berdasarkan field 'name'.
+
+    Return:
+        - string .id (mis: "*4F") kalau ketemu
+        - None kalau tidak ketemu
+    """
+    secrets = get_ppp_secrets(router_host, api_user, api_pass, use_https=use_https)
+    for sec in secrets:
+        if sec.get("name") == secret_name:
+            return sec.get(".id")
+    return None
+
+
 def update_ppp_secret(
     router_host: str,
     api_user: str,
@@ -194,13 +219,21 @@ def update_ppp_secret(
     use_https: bool = False,
 ) -> Dict[str, Any]:
     """
-    Update PPP secret (mis: ganti profile, disable/enable, ganti password).
+    Update PPP secret (mis: ganti profile, disable/enable, ganti password)
+    berdasarkan 'name' PPP secret.
 
     Contoh updates:
       {"profile": "PAKET10M"}
       {"disabled": "yes"}
     """
-    path = f"/ppp/secret/{secret_name}"
+    secret_id = _find_ppp_secret_id_by_name(
+        router_host, api_user, api_pass, secret_name, use_https=use_https
+    )
+    if not secret_id:
+        raise MikrotikError(f"PPP secret dengan name='{secret_name}' tidak ditemukan")
+
+    # Pakai .id di URL supaya aman meski name mengandung spasi/karakter khusus
+    path = f"/ppp/secret/{secret_id}"
     data = _request("PATCH", router_host, path, api_user, api_pass, json_body=updates, use_https=use_https)
     return data or {}
 
@@ -213,9 +246,15 @@ def delete_ppp_secret(
     use_https: bool = False,
 ) -> None:
     """
-    Hapus PPP secret dari router.
+    Hapus PPP secret dari router berdasarkan 'name' PPP secret.
     """
-    path = f"/ppp/secret/{secret_name}"
+    secret_id = _find_ppp_secret_id_by_name(
+        router_host, api_user, api_pass, secret_name, use_https=use_https
+    )
+    if not secret_id:
+        raise MikrotikError(f"PPP secret dengan name='{secret_name}' tidak ditemukan")
+
+    path = f"/ppp/secret/{secret_id}"
     _request("DELETE", router_host, path, api_user, api_pass, use_https=use_https)
 
 
