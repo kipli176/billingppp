@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from typing import Dict, Any
 
-from flask import Flask, app, redirect, url_for, render_template_string, session
-
+from flask import Flask, app, redirect, url_for, render_template_string, session, request
+import datetime
 from config import Config
 import db
 
@@ -125,6 +125,63 @@ def create_app() -> Flask:
             context={"db_status": db_status},
         )
 
+    # =============================
+    # GLOBAL LOCK INVOICE
+    # =============================
+    @app.before_request
+    def check_invoice_lock_global():
+        """
+        Lock global:
+        Jika invoice reseller bulan ini belum dibayar dan sudah lewat tanggal batas,
+        cegah semua route (GET/POST) dan redirect ke dashboard.
+        """
+
+        # endpoint bisa None (misal untuk static/error)
+        if request.endpoint is None:
+            return
+
+        # Bebaskan beberapa endpoint penting:
+        # - auth_reseller.* -> login/logout
+        # - static -> file statis
+        # - main.dashboard -> halaman invoice
+        if request.endpoint.startswith("auth_reseller."):
+            return
+        if request.endpoint == "static":
+            return
+        if request.endpoint == "main.dashboard":
+            return
+
+        # Kalau belum login reseller, biarkan flow normal
+        reseller_id = session.get("reseller_id")
+        if not reseller_id:
+            return
+
+        # Cek invoice bulan ini
+        today = datetime.date.today()
+        current_period_start = today.replace(day=1)
+
+        try:
+            invoice = db.query_one(
+                """
+                SELECT *
+                FROM v_reseller_invoices
+                WHERE reseller_id = %(rid)s
+                  AND period_start = %(ps)s
+                ORDER BY period_start DESC
+                LIMIT 1
+                """,
+                {"rid": reseller_id, "ps": current_period_start},
+            )
+        except Exception as e:
+            print(f"[check_invoice_lock_global] gagal ambil invoice: {e}")
+            return
+
+        # Kondisi lock: belum bayar & lewat tanggal 10
+        if invoice and invoice["status"] != "paid" and today.day > 10:
+            return redirect(url_for("main.dashboard"))
+
+        # kalau tidak locked, lanjut normal
+        return
 
     # ⚠️ Jangan hapus ini — ini adalah akhir dari create_app()
     return app

@@ -548,6 +548,19 @@ def list_customers():
                         🗑 
                     </button>
                     </form>
+                    <!-- Kirim WA (muncul hanya jika BELUM paid dan nomor WA tidak kosong) -->
+                    {% if not c.has_paid_current_period and c.wa_number %}
+                    <form method="post"
+                        action="{{ url_for('customers.send_wa_customer', customer_id=c.customer_id) }}"
+                        onsubmit="return confirm('Kirim WA tagihan ke {{ c.ppp_username }} ({{ c.wa_number }})?');">
+                    <button type="submit"
+                            class="inline-flex items-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 text-emerald-200 hover:bg-emerald-500/20"
+                            title="Kirim WA tagihan">
+                        📲 <span>WA</span>
+                    </button>
+                    </form>
+                    {% endif %}
+
                 </div>
                 </td>
 
@@ -2256,3 +2269,114 @@ def cancel_pay_customer(customer_id: int):
 
     msg = f"Pembayaran {months} bulan terakhir dibatalkan untuk user {cust['ppp_username']}."
     return redirect(url_for("customers.list_customers", success=msg))
+
+@bp.route("/customers/<int:customer_id>/send-wa", methods=["POST"])
+def send_wa_customer(customer_id: int):
+    """
+    Kirim WA tagihan ke 1 customer dari halaman list customers.
+
+    Syarat:
+    - reseller.use_notifications = TRUE
+    - customer belum lunas bulan ini (has_paid_current_period = FALSE)
+    - wa_number customer tidak kosong
+    """
+    reseller, _, redirect_resp = _require_login()
+    if redirect_resp is not None:
+        return redirect_resp
+
+    # pastikan notifikasi WA diaktifkan
+    if not reseller.get("use_notifications"):
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error="Notifikasi WA belum diaktifkan di Pengaturan Reseller.",
+            )
+        )
+
+    # ambil data customer dari view v_payment_status_detail
+    cust = db.query_one(
+        """
+        SELECT
+          customer_id,
+          ppp_username,
+          full_name,
+          wa_number,
+          profile_name,
+          monthly_price,
+          payment_status_text,
+          has_paid_current_period
+        FROM v_payment_status_detail
+        WHERE reseller_id = %(rid)s
+          AND customer_id = %(cid)s
+        """,
+        {"rid": reseller["id"], "cid": customer_id},
+    )
+    if cust is None:
+        return redirect(
+            url_for("customers.list_customers", error="Customer tidak ditemukan.")
+        )
+
+    # kalau sudah lunas, jangan kirim WA
+    if cust.get("has_paid_current_period"):
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"User {cust['ppp_username']} sudah tercatat lunas bulan ini.",
+            )
+        )
+
+    # cek nomor WA tidak kosong
+    wa_raw = (cust.get("wa_number") or "").strip()
+    if not wa_raw:
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"User {cust['ppp_username']} belum punya nomor WA.",
+            )
+        )
+
+    # opsional: normalisasi & validasi format WA
+    wa_clean = is_valid_wa(wa_raw, return_clean=True)
+    if not wa_clean:
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"Nomor WA {wa_raw} untuk user {cust['ppp_username']} tidak valid.",
+            )
+        )
+
+    nama = cust.get("full_name") or cust["ppp_username"]
+    user = cust["ppp_username"]
+    profile_name = cust.get("profile_name") or "-"
+    harga = cust.get("monthly_price") or 0
+    reseller_name = reseller.get("display_name") or reseller.get("router_username")
+
+    # kalau mau konsisten dengan format di cron job
+    harga_str = format_rupiah(harga)
+
+    message = (
+        f"Halo {nama},\n"
+        f"Tagihan internet untuk akun *{user}* ({profile_name}) bulan ini belum tercatat lunas.\n"
+        f"Total tagihan: {harga_str}\n\n"
+        f"Silakan melakukan pembayaran agar layanan tetap aktif.\n"
+        f"Terima kasih.\n"
+        f"- {reseller_name}"
+    )
+
+    try:
+        send_wa(wa_clean, message)
+    except WhatsAppError as e:
+        print(f"[send_wa_customer] gagal kirim WA ke {wa_clean}: {e}")
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"Gagal kirim WA ke {user}: {e}",
+            )
+        )
+
+    return redirect(
+        url_for(
+            "customers.list_customers",
+            success=f"WA berhasil dikirim ke {user} ({wa_clean}).",
+        )
+    )

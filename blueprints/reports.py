@@ -105,14 +105,14 @@ def unpaid_users():
 
     <div class="flex flex-wrap gap-2">
     <!-- Kirim WA ke pelanggan unpaid -->
-    <form method="post"
+    <!--form method="post"
           action="{{ url_for('reports.send_wa_unpaid') }}"
           class="inline-flex">
       <button type="submit"
               class="inline-flex items-center gap-1 rounded-md border border-brand-500 bg-brand-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 hover:bg-brand-500/20">
         📲 <span>WA ke Pelanggan Unpaid</span>
       </button>
-    </form>
+    </form-->
 
     <!-- Kirim ringkasan ke WA reseller -->
     <form method="post"
