@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import datetime
+from cron_jobs.notify_unpaid_users import format_rupiah, is_valid_wa
 
+from wa_client import send_wa, WhatsAppError
 from flask import (
     Blueprint,
     session,
     redirect,
     url_for,
-    request,
+    request, 
+    jsonify,
 )
 from datetime import date
 import db
@@ -1948,15 +1951,114 @@ def edit_customer(customer_id: int):
 # ======================================================================
 # AKSI: Bayar
 # ======================================================================
+def _do_pay_customer(reseller: dict, cust: dict, months: int) -> str:
+    """
+    Core logic bayar customer:
+    - hitung & update last_paid_period di DB
+    - kirim WA ke customer jika nomor valid
+    - jika nomor customer tidak ada/tidak valid, kirim ke WA reseller
+    - mengembalikan pesan sukses (string)
+    """
+    if months < 1:
+        months = 1
+
+    today = datetime.date.today()
+    current_period = today.replace(day=1)
+
+    # 1) Update last_paid_period di DB
+    db.execute(
+        """
+        UPDATE ppp_customers
+        SET last_paid_period = (
+                date_trunc('month', %(cp)s::timestamp)
+                + ((%(m)s::int - 1) * INTERVAL '1 month')
+            )::date,
+            updated_at = NOW()
+        WHERE id = %(cid)s
+          AND reseller_id = %(rid)s
+        """,
+        {
+            "cp": current_period,
+            "m": months,
+            "cid": cust["id"],
+            "rid": reseller["id"],
+        },
+    )
+
+    # 2) Kirim WA (prioritas ke customer, fallback ke reseller)
+    try:
+        if reseller.get("use_notifications"):
+            wa_target = None
+            target_is_customer = False
+
+            # coba pakai nomor customer dulu
+            wa_cust_raw = cust.get("wa_number")
+            wa_cust_clean = (
+                is_valid_wa(wa_cust_raw, return_clean=True) if wa_cust_raw else None
+            )
+            if wa_cust_clean:
+                wa_target = wa_cust_clean
+                target_is_customer = True
+            else:
+                # kalau nomor customer tidak ada / tidak valid → pakai nomor reseller
+                wa_reseller_raw = reseller.get("wa_number")
+                wa_reseller_clean = (
+                    is_valid_wa(wa_reseller_raw, return_clean=True)
+                    if wa_reseller_raw
+                    else None
+                )
+                if wa_reseller_clean:
+                    wa_target = wa_reseller_clean
+                    target_is_customer = False
+
+            if wa_target:
+                customer_name = cust.get("full_name") or cust["ppp_username"]
+                reseller_name = (
+                    reseller.get("display_name")
+                    or reseller.get("router_username")
+                )
+
+                if target_is_customer:
+                    # pesan untuk customer
+                    message = (
+                        f"Halo {customer_name},\n\n"
+                        f"Terima kasih telah membayar tagihan internet bulan ini. 🙏\n"
+                        f"Pembayaran {months} bulan sudah kami catat.\n\n"
+                        f"Salam,\n{reseller_name}"
+                    )
+                else:
+                    # fallback: pesan untuk reseller
+                    message = (
+                        f"Halo {reseller_name},\n\n"
+                        f"Pembayaran {months} bulan untuk customer "
+                        f"{customer_name} ({cust['ppp_username']}) sudah tercatat.\n"
+                        f"Nomor WhatsApp customer tidak tersedia / tidak valid, "
+                        f"sehingga notifikasi dikirim ke nomor Anda.\n\n"
+                        f"Salam,\nSistem Billing"
+                    )
+
+                try:
+                    send_wa(wa_target, message)
+                    print(f"[_do_pay_customer] sukses kirim WA ke {wa_target}")
+                except WhatsAppError as e:
+                    print(f"[_do_pay_customer] gagal kirim WA ke {wa_target}: {e}")
+    except Exception as e:
+        # jangan sampai error WA mengganggu proses pembayaran
+        print(f"[_do_pay_customer] error umum kirim WA: {e}")
+
+    # 3) Pesan sukses untuk UI / webhook
+    return f"Pembayaran {months} bulan tercatat untuk user {cust['ppp_username']}."
+
 
 @bp.route("/customers/<int:customer_id>/pay", methods=["POST"])
 def pay_customer(customer_id: int):
     """
-    Aksi bayar sederhana:
-    - Menandai last_paid_period untuk customer ini.
-    - months (int) = jumlah bulan yang dibayar, default 1.
-    - Pembayaran dihitung mulai bulan berjalan:
-        last_paid_period = current_period + (months-1) bulan.
+    Aksi bayar dari UI:
+    - reseller diambil dari session (_require_login)
+    - customer dicari berdasarkan customer_id + reseller_id
+    - months diambil dari form (default 1)
+    - panggil _do_pay_customer
+    - redirect ke list_customers dengan pesan sukses / error
     """
     reseller, _, redirect_resp = _require_login()
     if redirect_resp is not None:
@@ -1967,47 +2069,137 @@ def pay_customer(customer_id: int):
         months = int(raw_months)
     except ValueError:
         months = 1
-    if months < 1:
-        months = 1
 
-    today = datetime.date.today()
-    current_period = today.replace(day=1)
-
+    # Ambil data customer (termasuk full_name & wa_number)
     cust = db.query_one(
         """
-        SELECT id, ppp_username
+        SELECT id, ppp_username, full_name, wa_number
         FROM ppp_customers
         WHERE id = %(cid)s AND reseller_id = %(rid)s
         """,
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
+        return redirect(
+            url_for("customers.list_customers", error="Customer tidak ditemukan.")
+        )
 
     try:
-        db.execute(
-            """
-            UPDATE ppp_customers
-            SET last_paid_period = (
-                    date_trunc('month', %(cp)s::timestamp)
-                    + ((%(m)s::int - 1) * INTERVAL '1 month')
-                )::date,
-                updated_at = NOW()
-            WHERE id = %(cid)s
-              AND reseller_id = %(rid)s
-            """,
-            {
-                "cp": current_period,
-                "m": months,
-                "cid": customer_id,
-                "rid": reseller["id"],
-            },
-        )
+        msg = _do_pay_customer(reseller, cust, months)
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"Gagal update pembayaran customer: {e}"))
+        return redirect(
+            url_for(
+                "customers.list_customers",
+                error=f"Gagal update pembayaran customer: {e}",
+            )
+        )
 
-    msg = f"Pembayaran {months} bulan tercatat untuk user {cust['ppp_username']}."
     return redirect(url_for("customers.list_customers", success=msg))
+
+@bp.route("/webhook/pay-customer", methods=["POST"])
+def webhook_pay_customer():
+    """
+    Webhook untuk auto-pay customer.
+
+    Input (JSON atau form):
+      - username     : ppp_username customer
+      - reseller_wa  : nomor WA milik reseller (format bebas, akan dinormalisasi)
+      - months       : (opsional) jumlah bulan dibayar, default 1
+
+    Alur:
+      1) Normalisasi & validasi WA reseller.
+      2) Cari reseller berdasarkan wa_number.
+      3) Cari customer berdasarkan username + reseller_id.
+      4) Panggil _do_pay_customer.
+      5) Return JSON status.
+    """
+    data = request.get_json(silent=True) or request.form
+
+    username = (data.get("username") or "").strip()
+    reseller_wa_raw = (data.get("reseller_wa") or "").strip()
+    raw_months = (str(data.get("months") or "1")).strip()
+
+    if not username or not reseller_wa_raw:
+        return jsonify(
+            {
+                "status": "error",
+                "error": "username dan reseller_wa wajib diisi",
+            }
+        ), 400
+
+    # Normalisasi & validasi WA reseller pakai is_valid_wa
+    wa_reseller = is_valid_wa(reseller_wa_raw, return_clean=True)
+    if not wa_reseller:
+        return jsonify(
+            {
+                "status": "error",
+                "error": "Nomor WA reseller tidak valid",
+            }
+        ), 400
+
+    # Parse months
+    try:
+        months = int(raw_months)
+    except ValueError:
+        months = 1
+
+    # Cari reseller berdasarkan wa_number
+    reseller = db.query_one(
+        """
+        SELECT id, display_name, router_username, router_password,
+               wa_number, use_notifications
+        FROM resellers
+        WHERE wa_number = %(wa)s
+        """,
+        {"wa": wa_reseller},
+    )
+    if reseller is None:
+        return jsonify(
+            {
+                "status": "error",
+                "error": "Reseller dengan WA tersebut tidak ditemukan",
+            }
+        ), 404
+
+    # Cari customer berdasarkan username + reseller_id
+    cust = db.query_one(
+        """
+        SELECT id, ppp_username, full_name, wa_number
+        FROM ppp_customers
+        WHERE ppp_username = %(user)s
+          AND reseller_id  = %(rid)s
+        """,
+        {"user": username, "rid": reseller["id"]},
+    )
+    if cust is None:
+        return jsonify(
+            {
+                "status": "error",
+                "error": "Customer dengan username tersebut tidak ditemukan untuk reseller ini",
+            }
+        ), 404
+
+    # Jalankan core logic pembayaran
+    try:
+        msg = _do_pay_customer(reseller, cust, months)
+    except Exception as e:
+        return jsonify(
+            {
+                "status": "error",
+                "error": f"Gagal update pembayaran customer: {e}",
+            }
+        ), 500
+
+    return jsonify(
+        {
+            "status": "ok",
+            "message": msg,
+            "reseller_id": reseller["id"],
+            "customer_id": cust["id"],
+        }
+    ), 200
+# ======================================================================
+# AKSI: Cancel Pay (mundurkan last_paid_period)
 @bp.route("/customers/<int:customer_id>/cancel-pay", methods=["POST"])
 def cancel_pay_customer(customer_id: int):
     """

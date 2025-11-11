@@ -8,40 +8,38 @@ import db
 from wa_client import send_wa, WhatsAppError
 
 
-def is_valid_wa(number: Optional[str]) -> bool:
+def is_valid_wa(number: Optional[str], return_clean: bool = False):
     """
-    Validator sederhana nomor WhatsApp.
+    Validator + normalisasi sederhana nomor WhatsApp.
 
-    Aturan:
-    - Boleh diawali dengan '+' (akan dibuang)
-    - Hanya digit
-    - Panjang 10–15 digit
-    - (Opsional) bisa dipaksa mulai dengan '62' kalau mau strict Indonesia
+    - Menghapus spasi, titik, dan tanda hubung.
+    - Menerima awalan '+', '0', atau '8', dikonversi ke format '62...'.
+    - Panjang valid 10–15 digit.
+    - Jika return_clean=True, kembalikan string nomor hasil normalisasi.
+    - Jika return_clean=False, kembalikan True/False.
     """
     if not number:
-        return False
+        return None if return_clean else False
 
-    number = number.strip()
-    if not number:
-        return False
+    # ambil digit & '+' saja
+    s = "".join(ch for ch in number.strip() if ch.isdigit() or ch == "+")
+    if not s:
+        return None if return_clean else False
 
-    # buang plus di depan kalau ada
-    if number.startswith("+"):
-        number = number[1:]
+    if s.startswith("+"):
+        s = s[1:]
+    if s.startswith("0"):
+        s = "62" + s[1:]
+    elif s.startswith("8"):
+        s = "62" + s
 
-    # cek hanya digit
-    if not number.isdigit():
-        return False
+    # hanya digit
+    if not s.isdigit() or not (10 <= len(s) <= 15):
+        return None if return_clean else False
 
-    # cek panjang
-    if not (10 <= len(number) <= 15):
-        return False
+    return s if return_clean else True
 
-    # Kalau mau wajib Indonesia, aktifkan ini:
-    # if not number.startswith("62"):
-    #     return False
 
-    return True
 
 
 def format_rupiah(amount: int) -> str:
