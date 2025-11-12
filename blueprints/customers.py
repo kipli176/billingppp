@@ -777,12 +777,13 @@ def sync_customers():
 
     success = f"Sinkron selesai. {inserted} user baru ditambahkan."
     return redirect(url_for("customers.list_customers", success=success))
+
 @bp.route("/customers/new", methods=["GET", "POST"])
 def create_customer():
     """
     Tambah customer baru:
     - Insert ke ppp_customers.
-    - (opsional) nanti bisa ditambah create PPP secret ke router.
+    - (opsional) create PPP secret ke router.
     """
     reseller, router_ip, redirect_resp = _require_login()
     if redirect_resp is not None:
@@ -811,7 +812,6 @@ def create_customer():
         petugas_name = (request.form.get("petugas_name") or "").strip()
         billing_start_raw = (request.form.get("billing_start_date") or "").strip()
         profile_id_raw = (request.form.get("profile_id") or "").strip()
-        is_enabled_raw = request.form.get("is_enabled") or "1"
 
         if not ppp_username:
             error = "PPP Username tidak boleh kosong."
@@ -830,7 +830,8 @@ def create_customer():
             except ValueError:
                 error = "Profile ID tidak valid."
 
-        is_enabled = (is_enabled_raw == "1")
+        # default enabled (status enable/disable dihilangkan)
+        is_enabled = True
 
         if not error:
             # Cek apakah username sudah ada di sistem (semua reseller)
@@ -878,8 +879,7 @@ def create_customer():
             except Exception as e:
                 error = f"Gagal insert customer ke DB: {e}"
 
-        # (Opsional) Tambah PPP secret ke router di sini,
-        # kalau kamu sudah punya create_ppp_secret di mikrotik_client.
+        # (Opsional) Tambah PPP secret ke router
         if not error and router_ip and router_ip != "-" and ppp_password:
             api_user = reseller["router_username"]
             api_pass = reseller["router_password"]
@@ -889,14 +889,26 @@ def create_customer():
                     if p["id"] == profile_id:
                         profile_name = p["name"]
                         break
-            secret_payload = {
-                "name": ppp_username,
-                "password": ppp_password,
-            }
-            if profile_name:
-                secret_payload["profile"] = profile_name
             try:
-                create_ppp_secret(router_ip, api_user, api_pass, secret_payload)
+                # >>> FIX PENTING: panggil helper dgn argumen terpisah, bukan dict
+                create_ppp_secret(
+                    router_ip,
+                    api_user,
+                    api_pass,
+                    ppp_username,          # secret_name
+                    ppp_password,          # secret_password
+                    profile=profile_name,  # opsional
+                )
+                # default enabled -> pastikan disabled="no" di router (kalau helper update tersedia)
+                try:
+                    update_ppp_secret(
+                        router_ip, api_user, api_pass,
+                        secret_name=ppp_username,
+                        updates={"disabled": "no"},
+                    )
+                except Exception:
+                    # kalau endpoint update tidak ada / gagal, biarkan saja: secret sudah dibuat
+                    pass
             except Exception as e:
                 error = f"DB sudah insert, tetapi gagal membuat PPP secret di router: {e}"
 
@@ -911,7 +923,6 @@ def create_customer():
             petugas_name = ""
             billing_start_raw = ""
             profile_id_raw = ""
-            is_enabled_raw = "1"
 
     else:
         # default nilai form
@@ -923,7 +934,6 @@ def create_customer():
         petugas_name = ""
         billing_start_raw = ""
         profile_id_raw = ""
-        is_enabled_raw = "1"
 
     body_html = """
 <!-- HEADER -->
@@ -992,53 +1002,25 @@ def create_customer():
     </div>
   </section>
 
-  <!-- PROFIL & STATUS -->
+  <!-- PROFIL PPP (status enable/disable DIHILANGKAN) -->
   <section class="rounded-lg border border-slate-800 bg-slate-900/70 p-4">
-    <h3 class="mb-3 text-sm font-semibold text-slate-200">📡 Profil PPP &amp; Status</h3>
+    <h3 class="mb-3 text-sm font-semibold text-slate-200">📡 Profil PPP</h3>
 
-    <div class="space-y-3 text-sm">
-      <div class="space-y-1">
-        <label class="block text-xs font-medium text-slate-300">
-          Profil PPP
-        </label>
-        <select
-          name="profile_id"
-          class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none"
-        >
-          <option value="">-- pilih profile --</option>
-          {% for p in profiles %}
-            <option value="{{ p.id }}" {% if profile_id_raw|int == p.id %}selected{% endif %}>
-              {{ p.name }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-
-      <div class="space-y-1">
-        <span class="block text-xs font-medium text-slate-300">Status User</span>
-        <div class="flex flex-wrap gap-4 text-xs text-slate-200">
-          <label class="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              name="is_enabled"
-              value="1"
-              {% if is_enabled_raw=='1' %}checked{% endif %}
-              class="h-3 w-3 rounded border-slate-600 bg-slate-900"
-            >
-            <span>Enable</span>
-          </label>
-          <label class="inline-flex items-center gap-2">
-            <input
-              type="radio"
-              name="is_enabled"
-              value="0"
-              {% if is_enabled_raw=='0' %}checked{% endif %}
-              class="h-3 w-3 rounded border-slate-600 bg-slate-900"
-            >
-            <span>Disable</span>
-          </label>
-        </div>
-      </div>
+    <div class="space-y-1 text-sm">
+      <label class="block text-xs font-medium text-slate-300">
+        Profil PPP
+      </label>
+      <select
+        name="profile_id"
+        class="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-emerald-500 focus:outline-none"
+      >
+        <option value="">-- pilih profile --</option>
+        {% for p in profiles %}
+          <option value="{{ p.id }}" {% if profile_id_raw|int == p.id %}selected{% endif %}>
+            {{ p.name }}
+          </option>
+        {% endfor %}
+      </select>
     </div>
   </section>
 
@@ -1151,8 +1133,7 @@ def create_customer():
             "petugas_name": petugas_name,
             "billing_start_raw": billing_start_raw,
             "profile_id_raw": profile_id_raw,
-            "is_enabled_raw": is_enabled_raw,
-            "today": date.today(),
+            "today": date.today(),  # untuk default value input date
         },
     )
 
