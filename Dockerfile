@@ -13,6 +13,9 @@ COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
+ENV TIMEZONE=Asia/Jakarta
+RUN apt-get update && apt-get install -y tzdata && \
+    ln -fs /usr/share/zoneinfo/Asia/Jakarta /etc/localtime && dpkg-reconfigure -f noninteractive tzdata
 
 # Copy seluruh source code
 COPY . .

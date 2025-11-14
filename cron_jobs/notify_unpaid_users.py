@@ -5,8 +5,14 @@ from __future__ import annotations
 from typing import Optional
 
 import db
-from wa_client import send_wa, WhatsAppError
-
+from wa_client import send_wa, WhatsAppError   
+import datetime
+import time
+import pytz
+from pathlib import Path
+import random
+import argparse
+import sys
 
 def is_valid_wa(number: Optional[str], return_clean: bool = False):
     """
@@ -50,31 +56,46 @@ def format_rupiah(amount: int) -> str:
     return f"{amount:,}".replace(",", ".")
 
 
-def notify_unpaid_users() -> None:
-    print("=== Mulai kirim notifikasi pelanggan unpaid ===")
+def notify_unpaid_users(force=False) -> None:
+    tz = pytz.timezone("Asia/Jakarta")
+    now = datetime.datetime.now(tz)
 
-    # 1. Ambil reseller aktif
+    # Jalankan hanya tanggal 25, kecuali pakai --force
+    if not force and now.day != 25:
+        print(f"[{now:%Y-%m-%d %H:%M:%S}] ⏸️ Skip: Hari ini tanggal {now.day}, bukan 25 (gunakan --force untuk override).")
+        return
+
+    # Cegah pengiriman ganda di hari yang sama
+    flag_file = Path("/tmp/notify_unpaid_flag.txt")
+    if not force and flag_file.exists():
+        mtime = datetime.datetime.fromtimestamp(flag_file.stat().st_mtime, tz)
+        if mtime.date() == now.date():
+            print(f"[{now:%Y-%m-%d %H:%M:%S}] ⏸️ Notifikasi tanggal {mtime.date()} sudah dikirim, skip ulang.")
+            return
+
+    print(f"[{now:%Y-%m-%d %H:%M:%S}] ✅ Mulai kirim notifikasi pelanggan unpaid{' (FORCED)' if force else ''}.\n")
+
     resellers = db.query_all("""
         SELECT id, display_name, use_notifications, wa_number
         FROM resellers
         WHERE is_active = TRUE
     """)
 
+    total_sent = 0
+    batch_size = 20       # kirim 20 pesan dulu
+    delay_seconds = 10    # istirahat 10 detik antar batch
+
     for r in resellers:
-        # cek apakah reseller mengaktifkan fitur notifikasi
         if not r.get("use_notifications"):
             continue
 
         rid = r["id"]
-        name = r["display_name"]
-        reseller_wa = (r.get("wa_number") or "").strip()
-
-        # kalau nomor WA reseller sendiri tidak valid, skip
-        if not is_valid_wa(reseller_wa):
-            print(f"⚠️ Reseller {name}: nomor WA reseller tidak valid, lewati.")
+        reseller_name = r["display_name"]
+        reseller_wa = is_valid_wa(r.get("wa_number") or "", return_clean=True)
+        if not reseller_wa:
+            print(f"⚠️ Reseller {reseller_name}: nomor WA reseller tidak valid, lewati.\n")
             continue
 
-        # 2. Ambil daftar pelanggan yang belum bayar (tanpa filter wa_number)
         unpaid = db.query_all("""
             SELECT ppp_username, full_name, wa_number, monthly_price
             FROM v_unpaid_customers_current_period
@@ -82,48 +103,71 @@ def notify_unpaid_users() -> None:
         """, {"rid": rid})
 
         if not unpaid:
+            print(f"✅ {reseller_name}: semua pelanggan sudah bayar.\n")
             continue
 
-        print(f"Reseller {name}: kirim notifikasi ke {len(unpaid)} pelanggan.")
+        print(f"🔔 {reseller_name}: {len(unpaid)} pelanggan belum bayar.")
 
-        # 3. Kirim pesan ke tiap pelanggan
-        for u in unpaid:
-            customer_wa = (u.get("wa_number") or "").strip()
+        for i, u in enumerate(unpaid, start=1):
+            customer_wa = is_valid_wa(u.get("wa_number") or "", return_clean=True)
 
-            # Tentukan tujuan:
-            # - jika WA customer valid, kirim ke customer
-            # - jika tidak, kirim ke WA reseller (fallback)
-            target_wa = reseller_wa
-            target_info = "reseller (fallback)"
+            # --- blok siap pakai: aktifkan kirim langsung ke pelanggan ---
             # if is_valid_wa(customer_wa):
             #     target_wa = customer_wa
             #     target_info = "customer"
             # else:
             #     target_wa = reseller_wa
             #     target_info = "reseller (fallback)"
+            # ------------------------------------------------------------
+            
+            # default: kirim ke reseller saja
+            target_wa = reseller_wa
+            target_info = "reseller (default)"
 
-            nama_pelanggan = (u.get("full_name") or "").strip() or u["ppp_username"]
+            nama = (u.get("full_name") or "").strip() or u["ppp_username"]
             nominal = format_rupiah(int(u["monthly_price"]))
-
             msg = (
-                f"Halo {nama_pelanggan},\n"
-                f"Tagihan bulan ini sebesar Rp {nominal} belum terbayar.\n"
-                f"Segera lakukan pembayaran agar layanan tetap aktif.\n"
-                f"Terima kasih.\n"
-                f"- {name}"
+                f"Halo {nama}, 👋\n\n"
+                f"Tagihan internet Anda bulan ini sebesar *Rp {nominal}* belum terbayar.\n"
+                f"Segera lakukan pembayaran agar layanan tetap aktif.\n\n"
+                f"Terima kasih 🙏\n"
+                f"- {reseller_name}"
             )
 
             try:
                 send_wa(target_wa, msg)
-                print(f"✅ Berhasil kirim ke {target_wa} ({target_info}).")
-            except WhatsAppError as e:
-                print(f"❌ Gagal kirim ke {target_wa} ({target_info}): {e}")
+                print(f"✅ {i}/{len(unpaid)} Kirim ke {target_wa} ({target_info}) sukses.")
+                total_sent += 1
             except Exception as e:
-                # supaya error tak terduga tidak menghentikan loop reseller lain
-                print(f"❌ Error tak terduga saat kirim ke {target_wa}: {e}")
+                print(f"❌ {i}/{len(unpaid)} Gagal kirim ke {target_wa}: {e}")
 
-    print("=== Selesai kirim notifikasi pelanggan unpaid ===")
+            # jeda acak antar kirim (0.5–2 detik)
+            time.sleep(random.uniform(0.5, 2.0))
+
+            # delay antar batch besar
+            if i % batch_size == 0:
+                print(f"⏳ Istirahat {delay_seconds} detik... (batch ke-{i // batch_size})")
+                time.sleep(delay_seconds)
+
+        print(f"✅ Selesai kirim untuk reseller {reseller_name}.\n")
+
+    if not force:
+        flag_file.touch()
+
+    print(f"🎯 Total pesan terkirim: {total_sent}")
+    print(f"[{datetime.datetime.now(tz):%Y-%m-%d %H:%M:%S}] ✅ Semua notifikasi selesai.")
+
+
 
 
 if __name__ == "__main__":
-    notify_unpaid_users()
+    parser = argparse.ArgumentParser(description="Kirim notifikasi pelanggan unpaid.")
+    parser.add_argument("--force", action="store_true", help="Jalankan meskipun bukan tanggal 25 atau sudah pernah kirim.")
+    args = parser.parse_args()
+
+    try:
+        notify_unpaid_users(force=args.force)
+    except KeyboardInterrupt:
+        print("\n🛑 Dibatalkan oleh pengguna.")
+        sys.exit(0)
+

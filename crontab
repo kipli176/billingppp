@@ -25,5 +25,8 @@ LOGFILE=/var/log/cron/app-cron.log
 
 # 3) Isolate user belum bayar tiap hari jam 08:00
 0 8 * * * root cd $APP_HOME && /usr/local/bin/python -m cron_jobs.isolate_unpaid_users >> $LOGFILE 2>&1
+# Bersihkan flag notifikasi tiap tanggal 1 jam 00:10
+10 0 1 * * root rm -f /tmp/notify_unpaid_flag.txt >> $LOGFILE 2>&1
+0 7 * * * root cd $APP_HOME && echo "=== [$(date)] RUN notify_unpaid_users ===" >> $LOGFILE && /usr/local/bin/python -m cron_jobs.notify_unpaid_users >> $LOGFILE 2>&1
 
 # Wajib diakhiri newline
