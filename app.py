@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Dict, Any
 
 from flask import Flask, app, redirect, url_for, render_template_string, session, request
-import datetime
+import datetime 
 from config import Config
 import db
 
@@ -37,6 +37,7 @@ def create_app() -> Flask:
         invoices,
         reports,
         admin,
+        petugas,
     )
 
     app.register_blueprint(auth_reseller.bp)
@@ -47,6 +48,7 @@ def create_app() -> Flask:
     app.register_blueprint(invoices.bp)
     app.register_blueprint(reports.bp)
     app.register_blueprint(admin.bp)
+    app.register_blueprint(petugas.bp)
 
     @app.route("/")
     def index():

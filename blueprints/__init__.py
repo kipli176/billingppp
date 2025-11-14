@@ -6,6 +6,7 @@ from . import customers
 from . import invoices
 from . import reports
 from . import admin
+from . import petugas
 
 __all__ = [
     "auth_reseller",
@@ -16,4 +17,5 @@ __all__ = [
     "invoices",
     "reports",
     "admin",
+    "petugas",  
 ]

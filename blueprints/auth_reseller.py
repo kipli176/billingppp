@@ -175,8 +175,7 @@ def _get_router_ip_for_reseller(username: str) -> str | None:
 # Route: Registrasi Reseller
 # ======================================================================
 
-@bp.route("/register", methods=["GET", "POST"])
-@bp.route("/register", methods=["GET", "POST"])
+@bp.route("/register", methods=["GET", "POST"]) 
 def register():
     """
     Registrasi reseller baru (tanpa input router IP).

@@ -11,12 +11,12 @@ from flask import (
     session,
     redirect,
     url_for,
-    request, 
-    jsonify,
+    request,  
 )
 from datetime import date
 import db
-from app import render_terminal_page
+from app import render_terminal_page 
+
 from mikrotik_client import (
     get_ppp_secrets,
     get_ppp_active,
@@ -28,6 +28,32 @@ from mikrotik_client import (
 )
 
 bp = Blueprint("customers", __name__)
+
+from urllib.parse import urlencode
+
+def _redirect_back_with_message(success=None, error=None, default_endpoint="customers.list_customers"):
+    """
+    Redirect otomatis kembali ke URL sebelum tombol diklik (request.referrer).
+    Jika referrer tidak ada, fallback ke default list_customers.
+    Pesan (success/error) otomatis ditambahkan ke query string, tanpa merusak query lainnya.
+    """
+
+    # URL yang user akses sebelum POST (paling ideal)
+    prev_url = request.referrer  
+
+    # fallback kalau referrer tidak ada
+    if not prev_url:
+        base = url_for(default_endpoint)
+        query = urlencode({"success": success} if success else {"error": error})
+        connector = "?" if "?" not in base else "&"
+        return redirect(f"{base}{connector}{query}")
+
+    # tambahkan query success/error ke URL sebelumnya
+    message = {"success": success} if success else {"error": error}
+    query = urlencode(message)
+
+    connector = "&" if "?" in prev_url else "?"
+    return redirect(f"{prev_url}{connector}{query}")
 
 
 # ======================================================================
@@ -460,109 +486,119 @@ def list_customers():
           <tr class="border-b border-slate-800/70 hover:bg-slate-900/60">
             <!-- Aksi -->
             <td class="px-1 py-1 align-top whitespace-nowrap">
-                <div class="flex flex-nowrap gap-1 overflow-x-auto text-[9px]">
-                    <!-- Edit -->
-                    <a href="{{ url_for('customers.edit_customer', customer_id=c.customer_id) }}"
-                    class="inline-flex items-center gap-1 rounded border border-sky-500/70 bg-sky-500/10 px-2 py-1 text-sky-200 hover:bg-sky-500/20"
-                    title="Edit">
-                    ✏️ 
-                    </a>
+    <div class="flex flex-nowrap gap-1 overflow-x-auto text-[9px]">
+        <!-- Edit (GET, opsional kalau mau juga bawa next) -->
+        <a href="{{ url_for('customers.edit_customer', customer_id=c.customer_id, next=request.full_path) }}"
+           class="inline-flex items-center gap-1 rounded border border-sky-500/70 bg-sky-500/10 px-2 py-1 text-sky-200 hover:bg-sky-500/20"
+           title="Edit">
+          ✏️
+        </a>
 
-                    <!-- Terminate -->
-                    <form method="post"
-                        action="{{ url_for('customers.terminate_customer', customer_id=c.customer_id) }}"
-                        onsubmit="return confirm('Terminate session PPP {{ c.ppp_username }} sekarang?');">
-                    <button type="submit"
-                            class="inline-flex items-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
-                            title="Terminate PPP">
-                        ⏹ <span>Rest</span>
-                    </button>
-                    </form>
+        <!-- Terminate -->
+        <form method="post"
+              action="{{ url_for('customers.terminate_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Terminate session PPP {{ c.ppp_username }} sekarang?');">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
+                    title="Terminate PPP">
+                ⏹ <span>Rest</span>
+            </button>
+        </form>
 
-                    <!-- Toggle Enabled -->
-                    <form method="post"
-                        action="{{ url_for('customers.toggle_enable_customer', customer_id=c.customer_id) }}"
-                        onsubmit="return confirm('Ubah status enable/disable user {{ c.ppp_username }}?');">
-                    <button type="submit"
-                            class="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
-                            title="Enable / Disable">
-                        {% if c.is_enabled %}🚫 <span>Off</span>{% else %}✅ <span>On</span>{% endif %}
-                    </button>
-                    </form>
+        <!-- Toggle Enabled -->
+        <form method="post"
+              action="{{ url_for('customers.toggle_enable_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Ubah status enable/disable user {{ c.ppp_username }}?');">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-900 px-2 py-1 text-slate-200 hover:border-emerald-500 hover:text-emerald-300"
+                    title="Enable / Disable">
+                {% if c.is_enabled %}🚫 <span>Off</span>{% else %}✅ <span>On</span>{% endif %}
+            </button>
+        </form>
 
-                    <!-- Suspend / Unsuspend -->
-                    {% if not c.is_isolated %}
-                    <form method="post"
-                            action="{{ url_for('customers.isolate_customer', customer_id=c.customer_id) }}"
-                            onsubmit="return confirm('Suspend (isolate) user {{ c.ppp_username }} ke profil isolasi?');">
-                        <button type="submit"
-                                class="inline-flex items-center gap-1 rounded border border-amber-500/70 bg-amber-500/10 px-2 py-1 text-amber-200 hover:bg-amber-500/20"
-                                title="Suspend / Isolate">
-                        🧊 <span>Susp</span>
-                        </button>
-                    </form>
-                    {% else %}
-                    <form method="post"
-                            action="{{ url_for('customers.unisolate_customer', customer_id=c.customer_id) }}"
-                            onsubmit="return confirm('Unsuspend user {{ c.ppp_username }} ke profil normal?');">
-                        <button type="submit"
-                                class="inline-flex items-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 text-emerald-200 hover:bg-emerald-500/20"
-                                title="Unsuspend">
-                        ⬅️ <span>Unsusp</span>
-                        </button>
-                    </form>
-                    {% endif %}
+        <!-- Suspend / Unsuspend -->
+        {% if not c.is_isolated %}
+        <form method="post"
+              action="{{ url_for('customers.isolate_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Suspend (isolate) user {{ c.ppp_username }} ke profil isolasi?');">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-amber-500/70 bg-amber-500/10 px-2 py-1 text-amber-200 hover:bg-amber-500/20"
+                    title="Suspend / Isolate">
+                🧊 <span>Susp</span>
+            </button>
+        </form>
+        {% else %}
+        <form method="post"
+              action="{{ url_for('customers.unisolate_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Unsuspend user {{ c.ppp_username }} ke profil normal?');">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 text-emerald-200 hover:bg-emerald-500/20"
+                    title="Unsuspend">
+                ⬅️ <span>Unsusp</span>
+            </button>
+        </form>
+        {% endif %}
 
-                    <!-- Bayar / Batalkan bayar -->
-                    {% if c.has_paid_current_period %}
-                    <form method="post"
-                            action="{{ url_for('customers.cancel_pay_customer', customer_id=c.customer_id) }}"
-                            onsubmit="return confirm('Batalkan 1 bulan pembayaran terakhir untuk {{ c.ppp_username }}?');">
-                        <input type="hidden" name="months" value="1">
-                        <button type="submit"
-                                class="inline-flex items-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
-                                title="Batalkan bayar">
-                        ↩️ <span>Unpaid</span>
-                        </button>
-                    </form>
-                    {% else %}
-                    <form method="post"
-                            action="{{ url_for('customers.pay_customer', customer_id=c.customer_id) }}"
-                            onsubmit="return confirm('Catat pembayaran 1 bulan untuk {{ c.ppp_username }}?');">
-                        <input type="hidden" name="months" value="1">
-                        <button type="submit"
-                                class="inline-flex items-center gap-1 rounded border border-green-400/70 bg-green-400/10 px-2 py-1 text-green-200 hover:bg-green-400/20"
-                                title="Tandai sudah bayar">
-                        💰 <span>Paid</span>
-                        </button>
-                    </form>
-                    {% endif %}
+        <!-- Bayar / Batalkan bayar -->
+        {% if c.has_paid_current_period %}
+        <form method="post"
+              action="{{ url_for('customers.cancel_pay_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Batalkan 1 bulan pembayaran terakhir untuk {{ c.ppp_username }}?');">
+            <input type="hidden" name="months" value="1">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-1 text-rose-200 hover:bg-rose-500/20"
+                    title="Batalkan bayar">
+                ↩️ <span>Unpaid</span>
+            </button>
+        </form>
+        {% else %}
+        <form method="post"
+              action="{{ url_for('customers.pay_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Catat pembayaran 1 bulan untuk {{ c.ppp_username }}?');">
+            <input type="hidden" name="months" value="1">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-green-400/70 bg-green-400/10 px-2 py-1 text-green-200 hover:bg-green-400/20"
+                    title="Tandai sudah bayar">
+                💰 <span>Paid</span>
+            </button>
+        </form>
+        {% endif %}
 
-                    <!-- Delete -->
-                    <form method="post"
-                        action="{{ url_for('customers.delete_customer', customer_id=c.customer_id) }}"
-                        onsubmit="return confirm('Yakin hapus user {{ c.ppp_username }} dari DB dan Mikrotik?');">
-                    <button type="submit"
-                            class="inline-flex items-center gap-1 rounded border border-rose-600/80 bg-rose-600/10 px-2 py-1 text-rose-200 hover:bg-rose-600/25"
-                            title="Hapus">
-                        🗑 
-                    </button>
-                    </form>
-                    <!-- Kirim WA (muncul hanya jika BELUM paid dan nomor WA tidak kosong) -->
-                    {% if not c.has_paid_current_period and c.wa_number %}
-                    <form method="post"
-                        action="{{ url_for('customers.send_wa_customer', customer_id=c.customer_id) }}"
-                        onsubmit="return confirm('Kirim WA tagihan ke {{ c.ppp_username }} ({{ c.wa_number }})?');">
-                    <button type="submit"
-                            class="inline-flex items-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 text-emerald-200 hover:bg-emerald-500/20"
-                            title="Kirim WA tagihan">
-                        📲 <span>WA</span>
-                    </button>
-                    </form>
-                    {% endif %}
+        <!-- Delete -->
+        <form method="post"
+              action="{{ url_for('customers.delete_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Yakin hapus user {{ c.ppp_username }} dari DB dan Mikrotik?');">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-rose-600/80 bg-rose-600/10 px-2 py-1 text-rose-200 hover:bg-rose-600/25"
+                    title="Hapus">
+                🗑
+            </button>
+        </form>
 
-                </div>
-                </td>
+        <!-- Kirim WA (muncul hanya jika BELUM paid dan nomor WA tidak kosong) -->
+        {% if not c.has_paid_current_period and c.wa_number %}
+        <form method="post"
+              action="{{ url_for('customers.send_wa_customer', customer_id=c.customer_id) }}"
+              onsubmit="return confirm('Kirim WA tagihan ke {{ c.ppp_username }} ({{ c.wa_number }})?');">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button type="submit"
+                    class="inline-flex items-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 text-emerald-200 hover:bg-emerald-500/20"
+                    title="Kirim WA tagihan">
+                📲 <span>WA</span>
+            </button>
+        </form>
+        {% endif %}
+
+    </div>
+</td>
+
 
 
             <!-- Nama -->
@@ -697,7 +733,7 @@ def sync_customers():
 
     if not router_ip or router_ip == "-":
         error = "Router IP tidak tersedia di session. Silakan login ulang."
-        return redirect(url_for("customers.list_customers", error=error))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=error))
 
     api_user = reseller["router_username"]
     api_pass = reseller["router_password"]
@@ -706,12 +742,12 @@ def sync_customers():
     try:
         secrets = get_ppp_secrets(router_ip, api_user, api_pass)
     except MikrotikError as e:
-        return redirect(url_for("customers.list_customers", error=f"Gagal mengambil PPP secret: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"Gagal mengambil PPP secret: {e}"))
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"Error tidak terduga saat akses router: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"Error tidak terduga saat akses router: {e}"))
 
     if not secrets:
-        return redirect(url_for("customers.list_customers", error="Router tidak punya PPP secret."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Router tidak punya PPP secret."))
 
     # 2. Ambil existing username dari DB
     existing_rows = db.query_all(
@@ -771,12 +807,12 @@ def sync_customers():
             inserted += 1
         except Exception as e:
             err_msg = f"Gagal insert user {name}: {e}. Sinkron dihentikan."
-            return redirect(url_for("customers.list_customers", error=err_msg))
+            return _redirect_back_with_message(url_for("customers.list_customers", error=err_msg))
 
 
 
     success = f"Sinkron selesai. {inserted} user baru ditambahkan."
-    return redirect(url_for("customers.list_customers", success=success))
+    return _redirect_back_with_message(url_for("customers.list_customers", success=success))
 
 @bp.route("/customers/new", methods=["GET", "POST"])
 def create_customer():
@@ -1149,7 +1185,7 @@ def terminate_customer(customer_id: int):
         return redirect_resp
 
     if not router_ip or router_ip == "-":
-        return redirect(url_for("customers.list_customers", error="Router IP hilang dari session."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Router IP hilang dari session."))
 
     cust = db.query_one(
         """
@@ -1160,7 +1196,7 @@ def terminate_customer(customer_id: int):
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Customer tidak ditemukan."))
 
     username = cust["ppp_username"]
     api_user = reseller["router_username"]
@@ -1172,11 +1208,11 @@ def terminate_customer(customer_id: int):
             msg = f"Session PPP '{username}' telah di-terminate."
         else:
             msg = f"Tidak ada session aktif untuk '{username}'."
-        return redirect(url_for("customers.list_customers", success=msg))
+        return _redirect_back_with_message(url_for("customers.list_customers", success=msg))
     except MikrotikError as e:
-        return redirect(url_for("customers.list_customers", error=f"Gagal terminate PPP: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"Gagal terminate PPP: {e}"))
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"Error terminate PPP: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"Error terminate PPP: {e}"))
 
 
 # ======================================================================
@@ -1190,7 +1226,7 @@ def toggle_enable_customer(customer_id: int):
         return redirect_resp
 
     if not router_ip or router_ip == "-":
-        return redirect(url_for("customers.list_customers", error="Router IP hilang dari session."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Router IP hilang dari session."))
 
     cust = db.query_one(
         """
@@ -1201,7 +1237,7 @@ def toggle_enable_customer(customer_id: int):
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Customer tidak ditemukan."))
 
     username = cust["ppp_username"]
     is_enabled = bool(cust["is_enabled"])
@@ -1223,7 +1259,7 @@ def toggle_enable_customer(customer_id: int):
             {"en": new_is_enabled, "cid": customer_id},
         )
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"Gagal update DB: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"Gagal update DB: {e}"))
 
     try:
         update_ppp_secret(
@@ -1234,9 +1270,9 @@ def toggle_enable_customer(customer_id: int):
             updates={"disabled": mt_disabled},
         )
     except MikrotikError as e:
-        return redirect(url_for("customers.list_customers", error=f"DB sudah berubah, tapi gagal update router: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"DB sudah berubah, tapi gagal update router: {e}"))
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"DB sudah berubah, tapi error update router: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"DB sudah berubah, tapi error update router: {e}"))
     # setelah update router, kill session aktif (kalau ada) supaya tidak nyantol
     try:
         terminate_ppp_active_by_name(router_ip, api_user, api_pass, username)
@@ -1244,7 +1280,7 @@ def toggle_enable_customer(customer_id: int):
         print(f"[toggle_enable_customer] gagal terminate session {username}: {e}")
 
     msg = f"User '{username}' sekarang {'ENABLED' if new_is_enabled else 'DISABLED'}."
-    return redirect(url_for("customers.list_customers", success=msg))
+    return _redirect_back_with_message(url_for("customers.list_customers", success=msg))
 
 
 # ======================================================================
@@ -1258,7 +1294,7 @@ def isolate_customer(customer_id: int):
         return redirect_resp
 
     if not router_ip or router_ip == "-":
-        return redirect(url_for("customers.list_customers", error="Router IP hilang dari session."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Router IP hilang dari session."))
 
     cust = db.query_one(
         """
@@ -1271,7 +1307,7 @@ def isolate_customer(customer_id: int):
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Customer tidak ditemukan."))
 
     username = cust["ppp_username"]
 
@@ -1287,7 +1323,7 @@ def isolate_customer(customer_id: int):
         {"rid": reseller["id"]},
     )
     if iso_profile is None:
-        return redirect(url_for("customers.list_customers", error="Belum ada profile isolasi (is_isolation=TRUE) untuk reseller ini."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Belum ada profile isolasi (is_isolation=TRUE) untuk reseller ini."))
 
     iso_profile_id = iso_profile["id"]
     iso_profile_name = iso_profile["name"]
@@ -1307,7 +1343,7 @@ def isolate_customer(customer_id: int):
             {"pid": iso_profile_id, "cid": customer_id},
         )
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"Gagal update DB untuk isolate: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"Gagal update DB untuk isolate: {e}"))
 
     try:
         update_ppp_secret(
@@ -1318,9 +1354,9 @@ def isolate_customer(customer_id: int):
             updates={"profile": iso_profile_name},
         )
     except MikrotikError as e:
-        return redirect(url_for("customers.list_customers", error=f"DB sudah isolate, tapi gagal ganti profile di router: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"DB sudah isolate, tapi gagal ganti profile di router: {e}"))
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"DB sudah isolate, tapi error ganti profile di router: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"DB sudah isolate, tapi error ganti profile di router: {e}"))
     # kill session aktif agar reconnect dengan profile isolasi
     try:
         terminate_ppp_active_by_name(router_ip, api_user, api_pass, username)
@@ -1328,7 +1364,7 @@ def isolate_customer(customer_id: int):
         print(f"[isolate_customer] gagal terminate session {username}: {e}")
 
     msg = f"User '{username}' sudah di-isolate dengan profile '{iso_profile_name}'."
-    return redirect(url_for("customers.list_customers", success=msg))
+    return _redirect_back_with_message(url_for("customers.list_customers", success=msg))
 
 
 # ======================================================================
@@ -1347,7 +1383,7 @@ def unisolate_customer(customer_id: int):
         return redirect_resp
 
     if not router_ip or router_ip == "-":
-        return redirect(
+        return _redirect_back_with_message(
             url_for("customers.list_customers", error="Router IP hilang dari session.")
         )
 
@@ -1365,12 +1401,12 @@ def unisolate_customer(customer_id: int):
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(
+        return _redirect_back_with_message(
             url_for("customers.list_customers", error="Customer tidak ditemukan.")
         )
 
     if not cust["is_isolated"]:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error="User ini tidak dalam status isolasi.",
@@ -1381,7 +1417,7 @@ def unisolate_customer(customer_id: int):
     profile_id = cust["profile_id"]
 
     if profile_id is None:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error="profile_id di database kosong, tidak tahu harus kembali ke profile apa.",
@@ -1399,7 +1435,7 @@ def unisolate_customer(customer_id: int):
         {"pid": profile_id, "rid": reseller["id"]},
     )
     if normal_profile is None:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error="Profil normal (berdasarkan profile_id) tidak ditemukan di ppp_profiles.",
@@ -1420,7 +1456,7 @@ def unisolate_customer(customer_id: int):
             {"cid": customer_id},
         )
     except Exception as e:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error=f"Gagal update DB untuk unisolate: {e}",
@@ -1440,14 +1476,14 @@ def unisolate_customer(customer_id: int):
             updates={"profile": norm_name},
         )
     except MikrotikError as e:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error=f"DB sudah unisolate, tapi gagal ganti profile di router: {e}",
             )
         )
     except Exception as e:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error=f"DB sudah unisolate, tapi error ganti profile di router: {e}",
@@ -1461,7 +1497,7 @@ def unisolate_customer(customer_id: int):
         print(f"[unisolate_customer] gagal terminate session {username}: {e}")
 
     msg = f"User '{username}' sudah dikembalikan dari isolasi ke profile '{norm_name}'."
-    return redirect(url_for("customers.list_customers", success=msg))
+    return _redirect_back_with_message(url_for("customers.list_customers", success=msg))
 
 
 
@@ -1476,7 +1512,7 @@ def delete_customer(customer_id: int):
         return redirect_resp
 
     if not router_ip or router_ip == "-":
-        return redirect(url_for("customers.list_customers", error="Router IP hilang dari session."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Router IP hilang dari session."))
 
     cust = db.query_one(
         """
@@ -1487,7 +1523,7 @@ def delete_customer(customer_id: int):
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Customer tidak ditemukan."))
 
     username = cust["ppp_username"]
     api_user = reseller["router_username"]
@@ -1515,10 +1551,10 @@ def delete_customer(customer_id: int):
             {"cid": customer_id},
         )
     except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"User sudah dihapus/diupayakan di router, tapi gagal hapus dari DB: {e}"))
+        return _redirect_back_with_message(url_for("customers.list_customers", error=f"User sudah dihapus/diupayakan di router, tapi gagal hapus dari DB: {e}"))
 
     msg = f"User '{username}' sudah dihapus dari router (sebisa mungkin) dan DB."
-    return redirect(url_for("customers.list_customers", success=msg))
+    return _redirect_back_with_message(url_for("customers.list_customers", success=msg))
 
 
 
@@ -1566,7 +1602,7 @@ def edit_customer(customer_id: int):
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
+        return _redirect_back_with_message(url_for("customers.list_customers", error="Customer tidak ditemukan."))
 
     # profiling list untuk dropdown
     profiles = db.query_all(
@@ -1945,10 +1981,20 @@ def edit_customer(customer_id: int):
 # ======================================================================
 # AKSI: Bayar
 # ======================================================================
-def _do_pay_customer(reseller: dict, cust: dict, months: int) -> str:
+def _do_pay_customer(
+    reseller: dict,
+    cust: dict,
+    months: int,
+    router_ip: str | None = None,
+) -> str:
     """
     Core logic bayar customer:
-    - hitung & update last_paid_period di DB
+    - jika user sedang di-isolate → unisolate di DB dulu
+    - kalau router_ip tersedia + profile normal ketemu → ganti profile di Mikrotik & kill session
+    - hitung & update last_paid_period di DB (dari bulan sekarang: awal bulan ini + (months-1))
+    - simpan log ke customer_payments:
+        - old_last_period, new_last_period,
+        - old_is_isolated, new_is_isolated
     - kirim WA ke customer jika nomor valid
     - jika nomor customer tidak ada/tidak valid, kirim ke WA reseller
     - mengembalikan pesan sukses (string)
@@ -1956,33 +2002,185 @@ def _do_pay_customer(reseller: dict, cust: dict, months: int) -> str:
     if months < 1:
         months = 1
 
+    customer_id = cust["id"]
+    reseller_id = reseller["id"]
+
+    # --- 0) Ambil state lama untuk log ---
+    # is_isolated diambil dari data customer yang sudah di-query di pay_customer()
+    old_is_isolated = bool(cust.get("is_isolated"))
+
+    try:
+        row_last = db.query_one(
+            """
+            SELECT last_paid_period
+            FROM ppp_customers
+            WHERE id = %(cid)s
+              AND reseller_id = %(rid)s
+            """,
+            {"cid": customer_id, "rid": reseller_id},
+        )
+        old_last_period = row_last["last_paid_period"] if row_last else None
+    except Exception as e:
+        raise Exception(f"Gagal membaca last_paid_period sebelum bayar: {e}")
+
+    # --- 1) AUTO-UNISOLATE kalau user masih isolate ---
+    try:
+        if old_is_isolated:
+            profile_id = cust.get("profile_id")
+            norm_name: str | None = None
+
+            # 1.a cari profile normal berdasarkan profile_id (kalau ada)
+            if profile_id:
+                normal_profile = db.query_one(
+                    """
+                    SELECT id, name, is_isolation
+                    FROM ppp_profiles
+                    WHERE id = %(pid)s
+                      AND reseller_id = %(rid)s
+                    """,
+                    {"pid": profile_id, "rid": reseller_id},
+                )
+                if normal_profile:
+                    norm_name = normal_profile["name"]
+
+            # 1.b UPDATE DB: set is_isolated = FALSE
+            db.execute(
+                """
+                UPDATE ppp_customers
+                SET is_isolated = FALSE,
+                    updated_at   = NOW()
+                WHERE id = %(cid)s
+                  AND reseller_id = %(rid)s
+                """,
+                {"cid": customer_id, "rid": reseller_id},
+            )
+
+            # 1.c kalau router_ip & nama profil normal tersedia → update Mikrotik
+            if router_ip and router_ip != "-" and norm_name:
+                api_user = reseller["router_username"]
+                api_pass = reseller["router_password"]
+
+                try:
+                    update_ppp_secret(
+                        router_ip,
+                        api_user,
+                        api_pass,
+                        secret_name=cust["ppp_username"],
+                        updates={"profile": norm_name},
+                    )
+                except MikrotikError as e:
+                    # DB sudah unisolate, Mikrotik gagal → hentikan dengan error
+                    raise Exception(
+                        f"DB sudah unisolate, tapi gagal ganti profile di router: {e}"
+                    )
+
+                # 1.d kill session supaya reconnect dengan profil normal
+                try:
+                    terminate_ppp_active_by_name(
+                        router_ip, api_user, api_pass, cust["ppp_username"]
+                    )
+                except Exception as e:
+                    print(
+                        f"[_do_pay_customer] gagal terminate session {cust['ppp_username']}: {e}"
+                    )
+    except Exception:
+        # biar bubbling ke caller (UI / webhook)
+        raise
+
+    # Setelah bayar, targetnya user TIDAK isolate
+    new_is_isolated = False
+
     today = datetime.date.today()
     current_period = today.replace(day=1)
 
-    # 1) Update last_paid_period di DB
-    db.execute(
-        """
-        UPDATE ppp_customers
-        SET last_paid_period = (
-                date_trunc('month', %(cp)s::timestamp)
-                + ((%(m)s::int - 1) * INTERVAL '1 month')
-            )::date,
-            updated_at = NOW()
-        WHERE id = %(cid)s
-          AND reseller_id = %(rid)s
-        """,
-        {
-            "cp": current_period,
-            "m": months,
-            "cid": cust["id"],
-            "rid": reseller["id"],
-        },
-    )
+    # --- 2) Update last_paid_period di DB
+    #     rumus: selalu dari bulan sekarang → awal bulan ini + (months - 1)
+    try:
+        db.execute(
+            """
+            UPDATE ppp_customers
+            SET last_paid_period = (
+                    date_trunc('month', %(cp)s::timestamp)
+                    + ((%(m)s::int - 1) * INTERVAL '1 month')
+                )::date,
+                updated_at = NOW()
+            WHERE id = %(cid)s
+              AND reseller_id = %(rid)s
+            """,
+            {
+                "cp": current_period,
+                "m": months,
+                "cid": customer_id,
+                "rid": reseller_id,
+            },
+        )
+    except Exception as e:
+        raise Exception(f"Gagal update last_paid_period customer: {e}")
 
-    # 2) Kirim WA (prioritas ke customer, fallback ke reseller)
+    # --- 3) Ambil last_paid_period baru (untuk dicatat ke customer_payments) ---
+    try:
+        row_new = db.query_one(
+            """
+            SELECT last_paid_period
+            FROM ppp_customers
+            WHERE id = %(cid)s
+              AND reseller_id = %(rid)s
+            """,
+            {"cid": customer_id, "rid": reseller_id},
+        )
+        if not row_new:
+            raise Exception("Customer tidak ditemukan setelah update pembayaran.")
+        new_last_period = row_new["last_paid_period"]
+    except Exception as e:
+        raise Exception(f"Gagal membaca last_paid_period setelah update: {e}")
+
+    # --- 4) Catat log pembayaran ke tabel customer_payments ---
+    try:
+        db.execute(
+            """
+            INSERT INTO customer_payments (
+                customer_id,
+                reseller_id,
+                months,
+                old_last_period,
+                new_last_period,
+                old_is_isolated,
+                new_is_isolated,
+                source,
+                note
+            ) VALUES (
+                %(cid)s,
+                %(rid)s,
+                %(months)s,
+                %(old_last)s,
+                %(new_last)s,
+                %(old_iso)s,
+                %(new_iso)s,
+                %(source)s,
+                %(note)s
+            )
+            """,
+            {
+                "cid": customer_id,
+                "rid": reseller_id,
+                "months": months,
+                "old_last": old_last_period,
+                "new_last": new_last_period,
+                "old_iso": old_is_isolated,
+                "new_iso": new_is_isolated,
+                "source": "manual_ui",
+                "note": None,
+            },
+        )
+    except Exception as e:
+        # Di titik ini last_paid_period sudah berubah, tapi log gagal.
+        # Lebih aman kita raise supaya ketahuan & bisa diperbaiki.
+        raise Exception(f"Gagal mencatat log pembayaran customer: {e}")
+
+    # --- 5) Kirim WA (prioritas ke customer, fallback ke reseller) ---
     try:
         if reseller.get("use_notifications"):
-            wa_target = None
+            wa_target: str | None = None
             target_is_customer = False
 
             # coba pakai nomor customer dulu
@@ -2008,12 +2206,10 @@ def _do_pay_customer(reseller: dict, cust: dict, months: int) -> str:
             if wa_target:
                 customer_name = cust.get("full_name") or cust["ppp_username"]
                 reseller_name = (
-                    reseller.get("display_name")
-                    or reseller.get("router_username")
+                    reseller.get("display_name") or reseller.get("router_username")
                 )
 
                 if target_is_customer:
-                    # pesan untuk customer
                     message = (
                         f"Halo {customer_name},\n\n"
                         f"Terima kasih telah membayar tagihan internet bulan ini. 🙏\n"
@@ -2021,7 +2217,6 @@ def _do_pay_customer(reseller: dict, cust: dict, months: int) -> str:
                         f"Salam,\n{reseller_name}"
                     )
                 else:
-                    # fallback: pesan untuk reseller
                     message = (
                         f"Halo {reseller_name},\n\n"
                         f"Pembayaran {months} bulan untuk customer "
@@ -2037,12 +2232,10 @@ def _do_pay_customer(reseller: dict, cust: dict, months: int) -> str:
                 except WhatsAppError as e:
                     print(f"[_do_pay_customer] gagal kirim WA ke {wa_target}: {e}")
     except Exception as e:
-        # jangan sampai error WA mengganggu proses pembayaran
         print(f"[_do_pay_customer] error umum kirim WA: {e}")
 
-    # 3) Pesan sukses untuk UI / webhook
+    # --- 6) Pesan sukses untuk UI / webhook ---
     return f"Pembayaran {months} bulan tercatat untuk user {cust['ppp_username']}."
-
 
 @bp.route("/customers/<int:customer_id>/pay", methods=["POST"])
 def pay_customer(customer_id: int):
@@ -2050,158 +2243,11 @@ def pay_customer(customer_id: int):
     Aksi bayar dari UI:
     - reseller diambil dari session (_require_login)
     - customer dicari berdasarkan customer_id + reseller_id
-    - months diambil dari form (default 1)
-    - panggil _do_pay_customer
+    - months diambil dari form (default 1, minimal 1)
+    - panggil _do_pay_customer (yang juga mencatat log ke customer_payments)
     - redirect ke list_customers dengan pesan sukses / error
     """
-    reseller, _, redirect_resp = _require_login()
-    if redirect_resp is not None:
-        return redirect_resp
-
-    raw_months = (request.form.get("months") or "1").strip()
-    try:
-        months = int(raw_months)
-    except ValueError:
-        months = 1
-
-    # Ambil data customer (termasuk full_name & wa_number)
-    cust = db.query_one(
-        """
-        SELECT id, ppp_username, full_name, wa_number
-        FROM ppp_customers
-        WHERE id = %(cid)s AND reseller_id = %(rid)s
-        """,
-        {"cid": customer_id, "rid": reseller["id"]},
-    )
-    if cust is None:
-        return redirect(
-            url_for("customers.list_customers", error="Customer tidak ditemukan.")
-        )
-
-    try:
-        msg = _do_pay_customer(reseller, cust, months)
-    except Exception as e:
-        return redirect(
-            url_for(
-                "customers.list_customers",
-                error=f"Gagal update pembayaran customer: {e}",
-            )
-        )
-
-    return redirect(url_for("customers.list_customers", success=msg))
-
-@bp.route("/webhook/pay-customer", methods=["POST"])
-def webhook_pay_customer():
-    """
-    Webhook untuk auto-pay customer.
-
-    Input (JSON atau form):
-      - username     : ppp_username customer
-      - reseller_wa  : nomor WA milik reseller (format bebas, akan dinormalisasi)
-      - months       : (opsional) jumlah bulan dibayar, default 1
-
-    Alur:
-      1) Normalisasi & validasi WA reseller.
-      2) Cari reseller berdasarkan wa_number.
-      3) Cari customer berdasarkan username + reseller_id.
-      4) Panggil _do_pay_customer.
-      5) Return JSON status.
-    """
-    data = request.get_json(silent=True) or request.form
-
-    username = (data.get("username") or "").strip()
-    reseller_wa_raw = (data.get("reseller_wa") or "").strip()
-    raw_months = (str(data.get("months") or "1")).strip()
-
-    if not username or not reseller_wa_raw:
-        return jsonify(
-            {
-                "status": "error",
-                "error": "username dan reseller_wa wajib diisi",
-            }
-        ), 400
-
-    # Normalisasi & validasi WA reseller pakai is_valid_wa
-    wa_reseller = is_valid_wa(reseller_wa_raw, return_clean=True)
-    if not wa_reseller:
-        return jsonify(
-            {
-                "status": "error",
-                "error": "Nomor WA reseller tidak valid",
-            }
-        ), 400
-
-    # Parse months
-    try:
-        months = int(raw_months)
-    except ValueError:
-        months = 1
-
-    # Cari reseller berdasarkan wa_number
-    reseller = db.query_one(
-        """
-        SELECT id, display_name, router_username, router_password,
-               wa_number, use_notifications
-        FROM resellers
-        WHERE wa_number = %(wa)s
-        """,
-        {"wa": wa_reseller},
-    )
-    if reseller is None:
-        return jsonify(
-            {
-                "status": "error",
-                "error": "Reseller dengan WA tersebut tidak ditemukan",
-            }
-        ), 404
-
-    # Cari customer berdasarkan username + reseller_id
-    cust = db.query_one(
-        """
-        SELECT id, ppp_username, full_name, wa_number
-        FROM ppp_customers
-        WHERE ppp_username = %(user)s
-          AND reseller_id  = %(rid)s
-        """,
-        {"user": username, "rid": reseller["id"]},
-    )
-    if cust is None:
-        return jsonify(
-            {
-                "status": "error",
-                "error": "Customer dengan username tersebut tidak ditemukan untuk reseller ini",
-            }
-        ), 404
-
-    # Jalankan core logic pembayaran
-    try:
-        msg = _do_pay_customer(reseller, cust, months)
-    except Exception as e:
-        return jsonify(
-            {
-                "status": "error",
-                "error": f"Gagal update pembayaran customer: {e}",
-            }
-        ), 500
-
-    return jsonify(
-        {
-            "status": "ok",
-            "message": msg,
-            "reseller_id": reseller["id"],
-            "customer_id": cust["id"],
-        }
-    ), 200
-# ======================================================================
-# AKSI: Cancel Pay (mundurkan last_paid_period)
-@bp.route("/customers/<int:customer_id>/cancel-pay", methods=["POST"])
-def cancel_pay_customer(customer_id: int):
-    """
-    Membatalkan pembayaran terakhir (mundurkan last_paid_period).
-    - months (int) = jumlah bulan yang dibatalkan, default 1.
-    - Jika last_paid_period NULL, tidak ada yang dibatalkan.
-    """
-    reseller, _, redirect_resp = _require_login()
+    reseller, router_ip, redirect_resp = _require_login()
     if redirect_resp is not None:
         return redirect_resp
 
@@ -2213,43 +2259,246 @@ def cancel_pay_customer(customer_id: int):
     if months < 1:
         months = 1
 
+    # Ambil data customer (tambah is_isolated & profile_id)
     cust = db.query_one(
         """
-        SELECT id, ppp_username, last_paid_period
+        SELECT
+          id,
+          ppp_username,
+          full_name,
+          wa_number,
+          is_isolated,
+          profile_id
         FROM ppp_customers
         WHERE id = %(cid)s AND reseller_id = %(rid)s
         """,
         {"cid": customer_id, "rid": reseller["id"]},
     )
     if cust is None:
-        return redirect(url_for("customers.list_customers", error="Customer tidak ditemukan."))
-
-    if not cust["last_paid_period"]:
-        return redirect(url_for("customers.list_customers", error=f"Tidak ada last_paid_period untuk user {cust['ppp_username']}."))
+        return _redirect_back_with_message(
+            url_for("customers.list_customers", error="Customer tidak ditemukan.")
+        )
 
     try:
+        msg = _do_pay_customer(reseller, cust, months, router_ip)
+    except Exception as e:
+        return _redirect_back_with_message(
+            url_for(
+                "customers.list_customers",
+                error=f"Gagal update pembayaran customer: {e}",
+            )
+        )
+
+    return _redirect_back_with_message(url_for("customers.list_customers", success=msg))
+# ======================================================================
+
+  
+@bp.route("/customers/<int:customer_id>/cancel-pay", methods=["POST"])
+def cancel_pay_customer(customer_id: int):
+    """
+    Membatalkan pembayaran terakhir (UNDO satu event pembayaran):
+    - Menggunakan tabel customer_payments:
+      - cari pembayaran terakhir customer yang belum di-undo (reversed_by_id IS NULL)
+      - kembalikan last_paid_period ke old_last_period dari event tersebut
+      - kembalikan is_isolated ke old_is_isolated dari event tersebut
+      - jika sebelumnya pembayaran meng-unisolate (old_is_isolated=True, new_is_isolated=False),
+        maka saat undo kita isolate lagi di Mikrotik
+      - catat event rollback (months negatif) dan isi reversed_by_id pada payment asli
+    - Input months dari form diabaikan: selalu UNDO 1 pembayaran terakhir.
+    """
+    reseller, router_ip, redirect_resp = _require_login()
+    if redirect_resp is not None:
+        return redirect_resp
+
+    # Ambil customer (untuk username & profile_id)
+    cust = db.query_one(
+        """
+        SELECT
+          id,
+          ppp_username,
+          billing_start_date,
+          last_paid_period,
+          is_isolated,
+          profile_id
+        FROM ppp_customers
+        WHERE id = %(cid)s AND reseller_id = %(rid)s
+        """,
+        {"cid": customer_id, "rid": reseller["id"]},
+    )
+    if cust is None:
+        return _redirect_back_with_message(
+            url_for("customers.list_customers", error="Customer tidak ditemukan.")
+        )
+
+    # Cari pembayaran TERAKHIR yang belum di-undo
+    payment = db.query_one(
+        """
+        SELECT
+          id,
+          months,
+          old_last_period,
+          new_last_period,
+          old_is_isolated,
+          new_is_isolated
+        FROM customer_payments
+        WHERE customer_id = %(cid)s
+          AND reseller_id = %(rid)s
+          AND reversed_by_id IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        {"cid": customer_id, "rid": reseller["id"]},
+    )
+
+    if payment is None:
+        return _redirect_back_with_message(
+            url_for(
+                "customers.list_customers",
+                error=f"Tidak ada pembayaran yang bisa dibatalkan untuk user {cust['ppp_username']}.",
+            )
+        )
+
+    old_last_period = payment["old_last_period"]
+    new_last_period = payment["new_last_period"]
+    old_iso = payment["old_is_isolated"]
+    new_iso = payment["new_is_isolated"]
+
+    try:
+        # 1) Kembalikan last_paid_period dan is_isolated ke nilai sebelum pembayaran itu
         db.execute(
             """
             UPDATE ppp_customers
-            SET last_paid_period = (
-                    (last_paid_period::timestamp)
-                    - (%(m)s::int * INTERVAL '1 month')
-                )::date,
-                updated_at = NOW()
+            SET last_paid_period = %(old_last)s,
+                is_isolated      = COALESCE(%(old_iso)s, is_isolated),
+                updated_at       = NOW()
             WHERE id = %(cid)s
               AND reseller_id = %(rid)s
             """,
             {
-                "m": months,
+                "old_last": old_last_period,
+                "old_iso": old_iso,
                 "cid": customer_id,
                 "rid": reseller["id"],
             },
         )
-    except Exception as e:
-        return redirect(url_for("customers.list_customers", error=f"Gagal membatalkan pembayaran customer: {e}"))
 
-    msg = f"Pembayaran {months} bulan terakhir dibatalkan untuk user {cust['ppp_username']}."
-    return redirect(url_for("customers.list_customers", success=msg))
+        # 2) Catat event rollback di customer_payments (months negatif)
+        rollback = db.query_one(
+            """
+            INSERT INTO customer_payments (
+                customer_id,
+                reseller_id,
+                months,
+                old_last_period,
+                new_last_period,
+                old_is_isolated,
+                new_is_isolated,
+                source,
+                note
+            ) VALUES (
+                %(cid)s,
+                %(rid)s,
+                %(months)s,
+                %(old_last)s,
+                %(new_last)s,
+                %(old_iso)s,
+                %(new_iso)s,
+                %(source)s,
+                %(note)s
+            )
+            RETURNING id
+            """,
+            {
+                "cid": customer_id,
+                "rid": reseller["id"],
+                "months": -payment["months"],
+                # old_last = kondisi SETELAH payment (sebelum rollback)
+                "old_last": new_last_period,
+                # new_last = kondisi SESUDAH rollback (kembali ke old_last_period)
+                "new_last": old_last_period,
+                "old_iso": new_iso,   # sebelum rollback = state sesudah bayar
+                "new_iso": old_iso,   # sesudah rollback = state sebelum bayar
+                "source": "cancel_pay",
+                "note": f"Undo payment {payment['id']}",
+            },
+        )
+        rollback_id = rollback["id"]
+
+        # 3) Tandai payment lama sudah di-undo
+        db.execute(
+            """
+            UPDATE customer_payments
+            SET reversed_by_id = %(rbid)s
+            WHERE id = %(pid)s
+            """,
+            {"rbid": rollback_id, "pid": payment["id"]},
+        )
+    except Exception as e:
+        return _redirect_back_with_message(
+            url_for(
+                "customers.list_customers",
+                error=f"Gagal membatalkan pembayaran customer: {e}",
+            )
+        )
+
+    # 4) Sesuaikan Mikrotik berdasarkan perubahan is_isolated
+    #    Kalau pembayaran sebelumnya meng-unisolate (old_iso=True, new_iso=False),
+    #    maka sekarang kita isolate lagi.
+    try:
+        if router_ip and router_ip != "-" and old_iso is not None and new_iso is not None:
+            if old_iso is True and new_iso is False:
+                # artinya: sebelum bayar user isolate, sesudah bayar tidak isolate.
+                # sekarang rollback: kita perlu isolate lagi.
+                iso_profile = db.query_one(
+                    """
+                    SELECT id, name
+                    FROM ppp_profiles
+                    WHERE reseller_id = %(rid)s
+                      AND is_isolation = TRUE
+                    ORDER BY id
+                    LIMIT 1
+                    """,
+                    {"rid": reseller["id"]},
+                )
+
+                if iso_profile:
+                    api_user = reseller["router_username"]
+                    api_pass = reseller["router_password"]
+                    try:
+                        update_ppp_secret(
+                            router_ip,
+                            api_user,
+                            api_pass,
+                            secret_name=cust["ppp_username"],
+                            updates={"profile": iso_profile["name"]},
+                        )
+                        try:
+                            terminate_ppp_active_by_name(
+                                router_ip,
+                                api_user,
+                                api_pass,
+                                cust["ppp_username"],
+                            )
+                        except Exception as e:
+                            print(
+                                f"[cancel_pay_customer] gagal terminate session {cust['ppp_username']}: {e}"
+                            )
+                    except MikrotikError as e:
+                        # DB sudah rollback & set is_isolated TRUE, router gagal di-update → log saja
+                        print(
+                            f"[cancel_pay_customer] DB rollback OK, "
+                            f"tapi gagal set profile isolasi di router: {e}"
+                        )
+        # kalau old_iso == new_iso, berarti pembayaran tidak mengubah status isolasi
+        # → rollback juga tidak perlu ubah Mikrotik.
+    except Exception as e:
+        print(f"[cancel_pay_customer] error saat penyesuaian Mikrotik: {e}")
+
+    msg = (
+        f"Pembayaran terakhir (ID {payment['id']}) dibatalkan untuk user "
+        f"{cust['ppp_username']}."
+    )
+    return _redirect_back_with_message(url_for("customers.list_customers", success=msg))
 
 @bp.route("/customers/<int:customer_id>/send-wa", methods=["POST"])
 def send_wa_customer(customer_id: int):
@@ -2267,7 +2516,7 @@ def send_wa_customer(customer_id: int):
 
     # pastikan notifikasi WA diaktifkan
     if not reseller.get("use_notifications"):
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error="Notifikasi WA belum diaktifkan di Pengaturan Reseller.",
@@ -2293,13 +2542,13 @@ def send_wa_customer(customer_id: int):
         {"rid": reseller["id"], "cid": customer_id},
     )
     if cust is None:
-        return redirect(
+        return _redirect_back_with_message(
             url_for("customers.list_customers", error="Customer tidak ditemukan.")
         )
 
     # kalau sudah lunas, jangan kirim WA
     if cust.get("has_paid_current_period"):
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error=f"User {cust['ppp_username']} sudah tercatat lunas bulan ini.",
@@ -2309,7 +2558,7 @@ def send_wa_customer(customer_id: int):
     # cek nomor WA tidak kosong
     wa_raw = (cust.get("wa_number") or "").strip()
     if not wa_raw:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error=f"User {cust['ppp_username']} belum punya nomor WA.",
@@ -2319,7 +2568,7 @@ def send_wa_customer(customer_id: int):
     # opsional: normalisasi & validasi format WA
     wa_clean = is_valid_wa(wa_raw, return_clean=True)
     if not wa_clean:
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error=f"Nomor WA {wa_raw} untuk user {cust['ppp_username']} tidak valid.",
@@ -2348,14 +2597,14 @@ def send_wa_customer(customer_id: int):
         send_wa(wa_clean, message)
     except WhatsAppError as e:
         print(f"[send_wa_customer] gagal kirim WA ke {wa_clean}: {e}")
-        return redirect(
+        return _redirect_back_with_message(
             url_for(
                 "customers.list_customers",
                 error=f"Gagal kirim WA ke {user}: {e}",
             )
         )
 
-    return redirect(
+    return _redirect_back_with_message(
         url_for(
             "customers.list_customers",
             success=f"WA berhasil dikirim ke {user} ({wa_clean}).",
