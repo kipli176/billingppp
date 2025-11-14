@@ -1284,6 +1284,53 @@ def edit_petugas_customer(petugas_slug: str, cid: int):
     </div>
   </form>
 </section>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const form = document.querySelector('form');
+  const waInput = form.querySelector('input[name="wa_number"]');
+
+  if (waInput) {
+    // Normalisasi saat user mengetik
+    waInput.addEventListener('input', () => {
+      let raw = waInput.value;
+      raw = raw.replace(/[^\d+]/g, ''); // hapus huruf & simbol selain angka dan +
+      // auto tambahkan +62 jika mulai dari 0
+      if (raw.startsWith('0')) {
+        raw = '+62' + raw.substring(1);
+      }
+      // hilangkan spasi & tanda
+      raw = raw.replace(/[^\d+]/g, '');
+      waInput.value = raw;
+    });
+
+    // Normalisasi akhir sebelum submit
+    form.addEventListener('submit', (e) => {
+      let val = waInput.value.trim();
+
+      // hapus semua selain angka
+      val = val.replace(/\D/g, '');
+
+      // Jika diawali 0 → ganti 62
+      if (val.startsWith('0')) {
+        val = '62' + val.substring(1);
+      }
+
+      // Jika diawali 62 dua kali (misal 6262...) → rapikan
+      if (val.startsWith('6262')) {
+        val = val.replace(/^62+/, '62');
+      }
+
+      // Tambahkan 62 jika belum
+      if (!val.startsWith('62')) {
+        val = '62' + val;
+      }
+
+      waInput.value = val;
+    });
+  }
+});
+</script>
+
     """
 
     return _render_simple_page(
