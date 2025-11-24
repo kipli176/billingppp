@@ -755,7 +755,7 @@ def dashboard():
             "unpaid_total": unpaid_total,
             "total_users": total_users,
             "paid_users": paid_users,
-            "unpaid_users": unpaid_users,
+            "unpaid_users": unpaid_count,
             "isolated_users": isolated_users,
             "disabled_users": disabled_users,
             "profiles": profiles,
