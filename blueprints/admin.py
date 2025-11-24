@@ -29,6 +29,19 @@ def _require_admin():
         return False, redirect(url_for("admin.admin_login"))
     return True, None
 
+# tepat di bawah definisi bp = Blueprint(...)
+
+@bp.route("/", methods=["GET"])
+def admin_index():
+    """
+    Entry point /admin:
+    - kalau sudah login sebagai admin -> langsung ke halaman invoices
+    - kalau belum login -> diarahkan ke halaman login admin
+    """
+    if session.get("is_admin"):
+        return redirect(url_for("admin.admin_invoices"))
+    return redirect(url_for("admin.admin_login"))
+
 
 # ======================================================================
 # Login / Logout Admin

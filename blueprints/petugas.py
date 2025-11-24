@@ -423,8 +423,9 @@ def list_petugas_customers(petugas_slug: str):
     paid_total = 0
     unpaid_count = 0
     unpaid_total = 0
+    komisi_bulan_ini = 0
 
-    # 1) ringkasan
+        # 1) ringkasan
     try:
         row = db.query_one(
             f"""
@@ -467,8 +468,62 @@ def list_petugas_customers(petugas_slug: str):
         if unpaid_row:
             unpaid_count = unpaid_row["cnt"] or 0
             unpaid_total = unpaid_row["total_amount"] or 0
+
+        # --- KOMISI BULAN INI UNTUK PETUGAS INI ---
+        rule = db.query_one(
+            """
+            SELECT commission_type, commission_value
+            FROM petugas_commission_rules
+            WHERE reseller_id = %(rid)s
+              AND petugas_slug = %(slug)s
+              AND is_active = TRUE
+            """,
+            {"rid": reseller["id"], "slug": petugas_slug.lower()},
+        )
+
+        if rule:
+            commission_type = rule["commission_type"]
+            commission_value = float(rule["commission_value"] or 0)
+
+            today = datetime.date.today()
+            period_start = today.replace(day=1)
+            komisi_row = db.query_one(
+                """
+                SELECT
+                  COALESCE(SUM(cp.months), 0) AS total_months,
+                  COALESCE(SUM(
+                    CASE
+                      WHEN %(ctype)s = 'percent'
+                        THEN cp.months * COALESCE(p.monthly_price, 0) * %(cval)s
+                      WHEN %(ctype)s = 'fixed'
+                        THEN cp.months * %(cval)s
+                      ELSE 0
+                    END
+                  ), 0) AS total_komisi
+                FROM customer_payments cp
+                JOIN ppp_customers c ON cp.customer_id = c.id
+                LEFT JOIN ppp_profiles p ON c.profile_id = p.id
+                WHERE cp.reseller_id = %(rid)s
+                  AND LOWER(c.petugas_name) = %(slug)s
+                  AND cp.reversed_by_id IS NULL
+                  AND cp.created_at::date BETWEEN %(start)s AND %(end)s
+                """,
+                {
+                    "rid": reseller["id"],
+                    "slug": petugas_slug.lower(),
+                    "start": period_start,
+                    "end": today,
+                    "ctype": commission_type,
+                    "cval": commission_value,
+                },
+            )
+
+            if komisi_row:
+                komisi_bulan_ini = komisi_row["total_komisi"] or 0
+
     except Exception as e:
         db_error = f"Gagal menghitung ringkasan data customers: {e}"
+
 
     # 2) list customers
     try:
@@ -585,10 +640,10 @@ def list_petugas_customers(petugas_slug: str):
 <!-- RINGKASAN -->
 <section class="mt-4 grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-4 md:gap-3">
   {% for label, value, color, extra in [
-    ('Total Customer', total_rows, 'slate', None),
-    ('Online', online_count, 'emerald', None),
+    ('Total Customer', total_rows, 'slate', None), 
     ('Paid Bulan Ini', paid_count, 'emerald', format_rupiah(paid_total)),
-    ('Belum Bayar', unpaid_count, 'rose', format_rupiah(unpaid_total))
+    ('Belum Bayar', unpaid_count, 'rose', format_rupiah(unpaid_total)),
+    ('Komisi Bulan Ini', format_rupiah(komisi_bulan_ini), 'sky', None)
   ] %}
     <div class="rounded-lg border border-slate-800 bg-slate-900/70 p-2 sm:p-3">
       <div class="text-slate-400">{{ label }}</div>
@@ -599,6 +654,7 @@ def list_petugas_customers(petugas_slug: str):
     </div>
   {% endfor %}
 </section>
+
 
 <!-- FILTER STATUS -->
 <div class="mt-4 flex flex-wrap items-center gap-1 text-[10px] sm:text-[11px]">
@@ -641,40 +697,53 @@ def list_petugas_customers(petugas_slug: str):
         {% for c in customers %}
           <tr class="border-b border-slate-800/80 hover:bg-slate-900/80">
             <td class="px-2 py-1 align-top">
-              <div class="flex flex-col gap-1">
+            <div class="flex gap-1">
                 {% if c.has_paid_current_period %}
+                <!-- SUDAH BAYAR: 3 tombol = Unpaid / Print / Edit -->
                 <form method="post"
                         action="{{ url_for('petugas.cancel_pay_customer', petugas_slug=petugas_slug, customer_id=c.customer_id) }}"
-                        data-confirm="Batalkan pembayaran terakhir untuk {{ c.ppp_username }}?">
+                        data-confirm="Batalkan pembayaran terakhir untuk {{ c.ppp_username }}?"
+                        class="flex-1">
                     <button type="submit"
-                            class="inline-flex items-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-0.5 text-[10px] text-rose-100 hover:bg-rose-500/20">
+                            class="w-full inline-flex items-center justify-center gap-1 rounded border border-rose-500/70 bg-rose-500/10 px-2 py-1 text-[10px] text-rose-100 hover:bg-rose-500/20">
                     ↩️ Unpaid
                     </button>
-                    <a href="{{ url_for('petugas.petugas_print_customer', petugas_slug=petugas_slug, cid=c.customer_id) }}"
-                    data-confirm="Cetak struk untuk {{ c.ppp_username }}?"
-                    class="inline-flex items-center gap-1 rounded border border-slate-600 bg-slate-800/40 px-2 py-0.5 text-[10px] text-slate-100 hover:bg-slate-700/60">
-                    🖨️ Print
-                    </a>
                 </form>
+
+                <a href="{{ url_for('petugas.petugas_print_customer', petugas_slug=petugas_slug, cid=c.customer_id) }}"
+                    data-confirm="Cetak struk untuk {{ c.ppp_username }}?"
+                    class="flex-1 inline-flex items-center justify-center gap-1 rounded border border-slate-600 bg-slate-800/40 px-2 py-1 text-[10px] text-slate-100 hover:bg-slate-700/60">
+                    🖨️ Print
+                </a>
+
+                <a href="{{ url_for('petugas.edit_petugas_customer', petugas_slug=petugas_slug, cid=c.customer_id) }}"
+                    data-confirm="Edit data pelanggan {{ c.ppp_username }}?"
+                    class="flex-1 inline-flex items-center justify-center gap-1 rounded border border-sky-500/70 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-200 hover:bg-sky-500/20">
+                    ✏️ Edit
+                </a>
+
                 {% else %}
+                <!-- BELUM BAYAR: 2 tombol = Paid / Edit -->
                 <form method="post"
                         action="{{ url_for('petugas.pay_customer', petugas_slug=petugas_slug, customer_id=c.customer_id) }}"
-                        data-confirm="Catat pembayaran 1 bulan untuk {{ c.ppp_username }}?">
+                        data-confirm="Catat pembayaran 1 bulan untuk {{ c.ppp_username }}?"
+                        class="flex-1">
                     <input type="hidden" name="months" value="1">
                     <button type="submit"
-                            class="inline-flex items-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-100 hover:bg-emerald-500/20">
+                            class="w-full inline-flex items-center justify-center gap-1 rounded border border-emerald-500/70 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-100 hover:bg-emerald-500/20">
                     💰 Paid
                     </button>
                 </form>
-                {% endif %}
-                <a href="{{ url_for('petugas.edit_petugas_customer', petugas_slug=petugas_slug, cid=c.customer_id) }}"
-                class="inline-flex items-center gap-1 rounded border border-sky-500/70 bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-200 hover:bg-sky-500/20"
-                data-confirm="Edit data pelanggan {{ c.ppp_username }}?">
-                ✏️ Edit
-                </a>
 
-              </div>
+                <a href="{{ url_for('petugas.edit_petugas_customer', petugas_slug=petugas_slug, cid=c.customer_id) }}"
+                    data-confirm="Edit data pelanggan {{ c.ppp_username }}?"
+                    class="flex-1 inline-flex items-center justify-center gap-1 rounded border border-sky-500/70 bg-sky-500/10 px-2 py-1 text-[10px] text-sky-200 hover:bg-sky-500/20">
+                    ✏️ Edit
+                </a>
+                {% endif %}
+            </div>
             </td>
+
 
             <td class="px-2 py-1 align-top">
               <div class="flex flex-col gap-0.5 text-[10px]">
@@ -733,7 +802,6 @@ def list_petugas_customers(petugas_slug: str):
 
 """
 
-
     return _render_simple_page(
         title=f"Petugas {petugas_slug}",
         body_html=body_html,
@@ -757,9 +825,11 @@ def list_petugas_customers(petugas_slug: str):
             "paid_total": paid_total,
             "unpaid_count": unpaid_count,
             "unpaid_total": unpaid_total,
+            "komisi_bulan_ini": komisi_bulan_ini,
             "format_rupiah": format_rupiah,
         },
     )
+
 
 
 # ======================================================================

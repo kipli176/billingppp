@@ -400,6 +400,10 @@ def dashboard():
        class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
       ⚙️ <span>Settings</span>
     </a>
+    <a href="{{ url_for('main.settings_komisi_petugas') }}"
+   class="flex items-center justify-between rounded-md border border-slate-700 bg-slate-900/60 px-4 py-2 text-xs text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+   💸<span> Komisi Petugas</span> 
+</a>
   </div>
 </section>
 
@@ -1000,3 +1004,244 @@ def update_profile_dashboard(profile_id: int):
         return redirect(url_for("main.dashboard", p_error=f"Gagal update profil: {e}"))
 
     return redirect(url_for("main.dashboard", p_success="Profil berhasil diperbarui."))
+
+@bp.route("/settings/komisi-petugas", methods=["GET", "POST"])
+def settings_komisi_petugas():
+    """
+    Halaman setting komisi petugas untuk reseller yang sedang login.
+    - Menampilkan daftar petugas (distinct dari ppp_customers)
+    - Bisa set tipe komisi: percent / fixed
+    - Bisa set nilai komisi
+    """
+    reseller, _ = _get_logged_in_reseller()
+    if reseller is None:
+        return redirect(url_for("auth_reseller.login"))
+
+    error = None
+    success = None
+
+    # ---------------- HANDLE POST: SIMPAN KOMISI ----------------
+    if request.method == "POST":
+        petugas_slug = (request.form.get("petugas_slug") or "").strip().lower()
+        commission_type = (request.form.get("commission_type") or "percent").strip()
+        value_str = (request.form.get("commission_value") or "0").strip()
+
+        if not petugas_slug:
+            error = "Petugas tidak valid."
+        elif commission_type not in ("percent", "fixed"):
+            error = "Tipe komisi tidak valid."
+        else:
+            try:
+                commission_value = float(value_str)
+            except ValueError:
+                error = "Nilai komisi harus berupa angka."
+
+        if error is None:
+            try:
+                db.execute(
+                    """
+                    INSERT INTO petugas_commission_rules (
+                        reseller_id,
+                        petugas_slug,
+                        commission_type,
+                        commission_value,
+                        is_active
+                    )
+                    VALUES (
+                        %(rid)s,
+                        %(slug)s,
+                        %(type)s,
+                        %(value)s,
+                        TRUE
+                    )
+                    ON CONFLICT (reseller_id, petugas_slug)
+                    DO UPDATE SET
+                        commission_type = EXCLUDED.commission_type,
+                        commission_value = EXCLUDED.commission_value,
+                        is_active = TRUE
+                    """,
+                    {
+                        "rid": reseller["id"],
+                        "slug": petugas_slug,
+                        "type": commission_type,
+                        "value": commission_value,
+                    },
+                )
+                success = f"Komisi untuk petugas '{petugas_slug}' berhasil disimpan."
+            except Exception as e:
+                error = f"Gagal menyimpan komisi: {e}"
+
+    # ---------------- AMBIL DATA PETUGAS DISTINKT ----------------
+    petugas_raw = db.query_all(
+        """
+        SELECT
+            LOWER(TRIM(c.petugas_name)) AS petugas_slug,
+            COUNT(*) AS customer_count
+        FROM ppp_customers c
+        WHERE c.reseller_id = %(rid)s
+          AND c.petugas_name IS NOT NULL
+          AND TRIM(c.petugas_name) <> ''
+        GROUP BY LOWER(TRIM(c.petugas_name))
+        ORDER BY LOWER(TRIM(c.petugas_name))
+        """,
+        {"rid": reseller["id"]},
+    )
+
+    # ---------------- AMBIL RULE KOMISI YANG SUDAH ADA ----------------
+    rules = db.query_all(
+        """
+        SELECT
+            petugas_slug,
+            commission_type,
+            commission_value,
+            is_active
+        FROM petugas_commission_rules
+        WHERE reseller_id = %(rid)s
+        """,
+        {"rid": reseller["id"]},
+    )
+
+    rules_by_slug = {r["petugas_slug"]: r for r in rules}
+
+    petugas_rows = []
+    for row in petugas_raw:
+        slug = row["petugas_slug"]
+        rule = rules_by_slug.get(slug)
+        petugas_rows.append(
+            {
+                "petugas_slug": slug,
+                "customer_count": row["customer_count"],
+                "commission_type": rule["commission_type"] if rule else "percent",
+                "commission_value": rule["commission_value"] if rule else 0,
+                "is_active": rule["is_active"] if rule else True,
+            }
+        )
+
+    body_html = """
+<section class="max-w-3xl mx-auto space-y-4">
+  <header class="flex flex-col gap-2 border-b border-slate-800 pb-3 md:flex-row md:items-center md:justify-between">
+    <div>
+      <div class="flex items-center gap-2 text-[11px] text-slate-500">
+        <span>Home</span>
+        <span>›</span>
+        <span>Settings</span>
+        <span>›</span>
+        <span class="text-slate-300">Komisi Petugas</span>
+      </div>
+      <h1 class="mt-1 flex items-center gap-2 text-base font-semibold tracking-tight text-slate-100">
+        <span>💸</span>
+        <span>Komisi Petugas</span>
+      </h1>
+      <p class="mt-1 text-xs text-slate-400">
+        Atur komisi per petugas untuk reseller
+        <span class="font-medium text-slate-200">{{ reseller_name }}</span>.
+      </p>
+    </div>
+    <a href="{{ url_for('main.dashboard') }}"
+       class="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900 px-3 py-1.5 text-[11px] font-medium text-slate-200 hover:border-slate-500 hover:bg-slate-800">
+      ⬅️ <span>Kembali ke Dashboard</span>
+    </a>
+  </header>
+
+  {% if error %}
+    <div class="rounded-md border border-rose-500/60 bg-rose-500/10 px-3 py-2 text-xs text-rose-100">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  {% if success %}
+    <div class="rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+      {{ success }}
+    </div>
+  {% endif %}
+
+  {% if petugas_rows %}
+    <div class="overflow-x-auto rounded-lg border border-slate-800 bg-slate-950/70">
+      <table class="min-w-full text-xs">
+        <thead class="border-b border-slate-800 bg-slate-900/80 text-[11px] uppercase tracking-wide text-slate-400">
+          <tr>
+            <th class="px-3 py-2 text-left">Petugas</th>
+            <th class="px-3 py-2 text-left">Jumlah Pelanggan</th>
+            <th class="px-3 py-2 text-left">Tipe Komisi</th>
+            <th class="px-3 py-2 text-left">Nilai</th>
+            <th class="px-3 py-2 text-right">Simpan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in petugas_rows %}
+          <tr class="border-t border-slate-800/80 hover:bg-slate-900/60">
+            <form method="post">
+              <td class="px-3 py-2 align-middle font-mono text-[11px] uppercase text-slate-100">
+                {{ row.petugas_slug }}
+              </td>
+              <td class="px-3 py-2 align-middle text-[11px] text-slate-300">
+                {{ row.customer_count }}
+              </td>
+
+              <input type="hidden" name="petugas_slug" value="{{ row.petugas_slug }}">
+
+              <td class="px-3 py-2 align-middle">
+                <select
+                  name="commission_type"
+                  class="w-full rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-[11px] text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0 sm:w-40"
+                >
+                  <option value="percent" {% if row.commission_type == 'percent' %}selected{% endif %}>
+                    Persentase dari omzet
+                  </option>
+                  <option value="fixed" {% if row.commission_type == 'fixed' %}selected{% endif %}>
+                    Nominal tetap / bulan
+                  </option>
+                </select>
+              </td>
+
+              <td class="px-3 py-2 align-middle">
+                <input
+                  type="number"
+                  step="0.0001"
+                  min="0"
+                  name="commission_value"
+                  value="{{ row.commission_value }}"
+                  class="w-full rounded-md border border-slate-700 bg-slate-900/80 px-2 py-1 text-[11px] text-slate-100 focus:border-emerald-500 focus:outline-none focus:ring-0 sm:w-32"
+                  required
+                >
+                <p class="mt-0.5 text-[10px] text-slate-400">
+                  {% if row.commission_type == 'percent' %}
+                    Contoh: 0.1 = 10%
+                  {% else %}
+                    Contoh: 10000 = Rp 10.000 per bulan
+                  {% endif %}
+                </p>
+              </td>
+
+              <td class="px-3 py-2 align-middle text-right">
+                <button
+                  type="submit"
+                  class="inline-flex items-center gap-1 rounded-md border border-emerald-500/60 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20"
+                >
+                  💾 Simpan
+                </button>
+              </td>
+            </form>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% else %}
+    <p class="text-xs text-slate-400">
+      Belum ada data petugas di pelanggan. Komisi bisa diatur setelah ada pelanggan yang punya nama petugas.
+    </p>
+  {% endif %}
+</section>
+    """
+
+    return render_terminal_page(
+        title="Komisi Petugas",
+        body_html=body_html,
+        context={
+            "reseller_name": reseller["display_name"] or reseller["router_username"],
+            "petugas_rows": petugas_rows,
+            "error": error,
+            "success": success,
+        },
+    )

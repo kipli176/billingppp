@@ -112,17 +112,17 @@ def notify_unpaid_users(force=False) -> None:
             customer_wa = is_valid_wa(u.get("wa_number") or "", return_clean=True)
 
             # --- blok siap pakai: aktifkan kirim langsung ke pelanggan ---
-            # if is_valid_wa(customer_wa):
-            #     target_wa = customer_wa
-            #     target_info = "customer"
-            # else:
-            #     target_wa = reseller_wa
-            #     target_info = "reseller (fallback)"
+            if is_valid_wa(customer_wa):
+                target_wa = customer_wa
+                target_info = "customer"
+            else:
+                target_wa = reseller_wa
+                target_info = "reseller (fallback)"
             # ------------------------------------------------------------
             
             # default: kirim ke reseller saja
-            target_wa = reseller_wa
-            target_info = "reseller (default)"
+            # target_wa = reseller_wa
+            # target_info = "reseller (default)"
 
             nama = (u.get("full_name") or "").strip() or u["ppp_username"]
             nominal = format_rupiah(int(u["monthly_price"]))
